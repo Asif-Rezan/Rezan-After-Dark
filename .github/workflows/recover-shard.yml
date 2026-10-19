@@ -1,0 +1,76 @@
+name: Recover original shard uploads only
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Original numeric GitHub daily run ID'
+        required: true
+        type: string
+      shard:
+        description: 'Shard number (0-19)'
+        required: true
+        type: string
+      backup_artifact:
+        description: 'Optional encrypted artifact name from the original run'
+        default: ''
+        type: string
+  push:
+    branches: [main]
+    paths: ['.github/recovery-request.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: rezan-after-dark-shard-recovery
+  cancel-in-progress: false
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OUTPUT_DIR: output/shard-recovery
+      RUN_SCOPED_CLEANUP: 'true'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Validate original run request
+        env:
+          REQUEST_RUN: ${{ inputs.run_id }}
+          REQUEST_SHARD: ${{ inputs.shard }}
+          REQUEST_BACKUP: ${{ inputs.backup_artifact }}
+        run: |
+          python - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          request = ({'run_id': os.environ['REQUEST_RUN'], 'shard': os.environ['REQUEST_SHARD'],
+              'backup_artifact': os.environ['REQUEST_BACKUP']} if os.environ['REQUEST_RUN'] else
+              json.loads(Path('.github/recovery-request.json').read_text()))
+          run, shard = str(request['run_id']), str(request['shard'])
+          backup = request.get('backup_artifact', '')
+          assert re.fullmatch(r'\d+', run) and re.fullmatch(r'\d+', shard) and 0 <= int(shard) < 20
+          assert not backup or re.fullmatch(r'private-shard-' + shard + r'-\d+', backup)
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              f.write(f'SAVED_RUN_ID=daily-{run}\nORIGINAL_RUN={run}\nSHARD={shard}\nBACKUP={backup}\n')
+          PY
+      - name: Restore encrypted original runner backup if supplied
+        if: ${{ env.BACKUP != '' }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ env.BACKUP }}
+          run-id: ${{ env.ORIGINAL_RUN }}
+          github-token: ${{ github.token }}
+      - name: Decrypt original backup
+        if: ${{ env.BACKUP != '' }}
+        env:
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+        run: python shard_backup.py unpack "$SHARD"
+      - name: Inspect original Drive work and recover only if complete
+        env:
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+        run: python -u long_video.py recover-shard "$SHARD"

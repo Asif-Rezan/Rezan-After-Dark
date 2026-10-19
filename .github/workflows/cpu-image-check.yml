@@ -1,0 +1,72 @@
+name: Free CPU image generation check
+on:
+  push:
+    branches: [main]
+    paths:
+      - image_cpu.py
+      - requirements-cpu.txt
+      - video_packaging.py
+      - thumbnail_design.py
+      - horror_topics.json
+      - .github/workflows/cpu-image-check.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cpu-image-check
+  cancel-in-progress: true
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU-only libraries
+        run: |
+          pip install 'torch>=2.6,<3' --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt -r requirements-cpu.txt
+      - name: Generate an image without API credentials
+        env:
+          IMAGE_SEED: '9931'
+          CPU_IMAGE_STEPS: '16'
+        run: |
+          python - <<'PYCODE'
+          import json
+          from pathlib import Path
+          from image_cpu import generate
+          topic = json.loads(Path('horror_topics.json').read_text())[0]
+          prompt = topic['thumbnail_visual_story'] + '. Cinematic horror illustration, eerie side light, no text.'
+          Path('output').mkdir(exist_ok=True)
+          Path('output/thumbnail-prompt.txt').write_text(prompt)
+          generate(prompt, Path('output/cpu-check.png'))
+          PYCODE
+          python - <<'PY'
+          from PIL import Image
+          from scene_check import check_scene
+          image = Image.open('output/cpu-check.png')
+          assert image.size == (1024, 576)
+          assert image.convert('L').getextrema()[1] > 0
+          scene = check_scene('output/cpu-check.png', {'focus': 'object', 'semantic_target': 'A sealed elevator opens onto an unlit hospital corridor'})
+          print({'actual_image_size': image.size, 'scene_match': scene})
+          from thumbnail_design import render_thumbnail
+          render_thumbnail('output/cpu-check.png', 'WHO CALLED THE LIFT?', 'output/thumbnail-check.jpg', 'Night shift horror')
+          assert Image.open('output/thumbnail-check.jpg').size == (1280, 720)
+          if not scene['passed']:
+              print('CLIP scene score is advisory; inspect the saved artwork before accepting it')
+          Image.open('output/thumbnail-check.jpg').resize((320,180)).save('output/thumbnail-mobile.jpg')
+          PY
+      - name: Save generated horror test image for visual review
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: horror-image-check
+          path: |
+            output/cpu-check.png
+            output/thumbnail-check.jpg
+            output/thumbnail-mobile.jpg
+            output/thumbnail-prompt.txt
+          retention-days: 1
+          if-no-files-found: error

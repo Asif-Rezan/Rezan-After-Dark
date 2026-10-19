@@ -1,0 +1,33 @@
+name: Validate saved private video
+on:
+  workflow_dispatch:
+    inputs:
+      saved_run:
+        description: Saved private test run ID
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Install strict decoding and Drive dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          pip install -r requirements.txt
+      - name: Read saved Drive assets and strictly decode the complete original MP4
+        env:
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          SAVED_RUN_ID: ${{ inputs.saved_run }}
+        run: python -u free_private_test.py restore
+# Read-only validation. No YouTube API call, no publishing, no generation.

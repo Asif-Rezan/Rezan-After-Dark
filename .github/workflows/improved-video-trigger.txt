@@ -1,0 +1,1 @@
+2026-10-14: repair portrait bias with concrete object/group composition and local semantic checks

@@ -1,0 +1,218 @@
+[
+  {
+    "id": "night-shift",
+    "category": "Night shift horror",
+    "title_angle": "The hospital floor that does not exist",
+    "search_phrase": "night shift horror",
+    "thumbnail_anchor": "sealed elevator",
+    "thumbnail_visual_story": "A sealed elevator opens onto an unlit hospital corridor on the right, a lone adult guard reflected in its doors",
+    "thumbnail_forbidden_terms": [
+      "gore",
+      "nudity"
+    ],
+    "facts": [
+      "An adult hospital guard receives calls from a sealed floor.",
+      "The elevator records visits that nobody remembers.",
+      "A familiar voice asks the guard to break the final rule."
+    ],
+    "sources": []
+  },
+  {
+    "id": "forest-road",
+    "category": "Forest horror",
+    "title_angle": "The road that returns to the same tree",
+    "search_phrase": "forest horror story",
+    "thumbnail_anchor": "crooked tree",
+    "thumbnail_visual_story": "A crooked tree beside a deserted wet road on the right casts a shadow facing a lone adult driver",
+    "thumbnail_forbidden_terms": [
+      "gore",
+      "nudity"
+    ],
+    "facts": [
+      "An adult driver follows a detour into a silent forest.",
+      "The same marked tree appears after every turn.",
+      "The road remembers a passenger the driver never picked up."
+    ],
+    "sources": []
+  },
+  {
+    "id": "rented-room",
+    "category": "Haunted house horror",
+    "title_angle": "The room behind the rented bedroom",
+    "search_phrase": "haunted house story",
+    "thumbnail_anchor": "locked bedroom door",
+    "thumbnail_visual_story": "A locked bedroom door on the right leaks pale light beneath its frame inside a decaying empty house",
+    "thumbnail_forbidden_terms": [
+      "gore",
+      "nudity"
+    ],
+    "facts": [
+      "An adult tenant hears furniture moving behind a wall.",
+      "The landlord insists the building has no adjoining room.",
+      "Each night a new item from the tenant’s childhood appears."
+    ],
+    "sources": []
+  },
+  {
+    "id": "last-train",
+    "category": "Supernatural horror",
+    "title_angle": "The passenger on the last train",
+    "search_phrase": "ghost train story",
+    "thumbnail_anchor": "empty train carriage",
+    "thumbnail_visual_story": "An empty train carriage on the right contains one reflected passenger in a rain-streaked window",
+    "thumbnail_forbidden_terms": [
+      "gore",
+      "nudity"
+    ],
+    "facts": [
+      "An adult commuter boards the final train after midnight.",
+      "Stations pass with names erased from every map.",
+      "A silent passenger knows which stop the commuter must avoid."
+    ],
+    "sources": []
+  },
+  {
+    "id": "radio",
+    "category": "Paranormal horror",
+    "title_angle": "The radio that broadcasts tomorrow",
+    "search_phrase": "paranormal horror",
+    "thumbnail_anchor": "old radio",
+    "thumbnail_visual_story": "An old radio on the right glows beside a rain-covered window, its reflection showing a distant silhouette",
+    "thumbnail_forbidden_terms": [
+      "gore",
+      "nudity"
+    ],
+    "facts": [
+      "An adult repairer restores an abandoned shortwave radio.",
+      "Its broadcasts describe events one day before they happen.",
+      "The next voice on the frequency is the repairer’s own."
+    ],
+    "sources": []
+  },
+  {
+    "id": "lighthouse",
+    "category": "Coastal horror",
+    "title_angle": "The light beneath the sea",
+    "search_phrase": "lighthouse horror",
+    "thumbnail_anchor": "lighthouse window",
+    "thumbnail_visual_story": "A lighthouse window on the right frames an impossible pale beam rising from dark ocean waves",
+    "thumbnail_forbidden_terms": [
+      "gore",
+      "nudity"
+    ],
+    "facts": [
+      "An adult lighthouse keeper sees a beam rising from underwater.",
+      "The logbook contains entries written in the keeper’s handwriting.",
+      "A vessel approaches with every cabin window dark."
+    ],
+    "sources": []
+  },
+  {
+    "id": "mirror",
+    "category": "Psychological horror",
+    "title_angle": "The reflection that stays awake",
+    "search_phrase": "mirror horror story",
+    "thumbnail_anchor": "cracked mirror",
+    "thumbnail_visual_story": "A cracked mirror on the right reflects a lit doorway while the surrounding empty bedroom remains dark",
+    "thumbnail_forbidden_terms": [
+      "gore",
+      "nudity"
+    ],
+    "facts": [
+      "An adult insomniac notices a delayed reflection.",
+      "The reflection starts moving while the room remains still.",
+      "Covering the mirror only moves the sound to another room."
+    ],
+    "sources": []
+  },
+  {
+    "id": "village",
+    "category": "Folk horror",
+    "title_angle": "The village that locks its doors at dusk",
+    "search_phrase": "folk horror story",
+    "thumbnail_anchor": "village gate",
+    "thumbnail_visual_story": "A village gate on the right stands half open beneath hanging lanterns, with a solitary shadow beyond",
+    "thumbnail_forbidden_terms": [
+      "gore",
+      "nudity"
+    ],
+    "facts": [
+      "An adult visitor arrives in a remote fictional village.",
+      "Every resident bolts the door before the final bell.",
+      "Someone outside speaks with the voices of absent neighbors."
+    ],
+    "sources": []
+  },
+  {
+    "id": "archive",
+    "category": "Occult mystery horror",
+    "title_angle": "The tape with a missing final minute",
+    "search_phrase": "found footage horror",
+    "thumbnail_anchor": "cassette recorder",
+    "thumbnail_visual_story": "A cassette recorder on the right rests beside a single illuminated chair in a dark abandoned archive",
+    "thumbnail_forbidden_terms": [
+      "gore",
+      "nudity"
+    ],
+    "facts": [
+      "An adult archivist catalogues unmarked recordings.",
+      "A recurring voice describes the archive’s present layout.",
+      "Every tape ends just before someone enters the room."
+    ],
+    "sources": []
+  },
+  {
+    "id": "stairs",
+    "category": "Urban supernatural horror",
+    "title_angle": "The staircase below the basement",
+    "search_phrase": "urban horror story",
+    "thumbnail_anchor": "basement staircase",
+    "thumbnail_visual_story": "A basement staircase on the right descends into impossible depth beneath a single flickering bulb",
+    "thumbnail_forbidden_terms": [
+      "gore",
+      "nudity"
+    ],
+    "facts": [
+      "An adult caretaker discovers a staircase beneath a locked basement.",
+      "The building plans show solid ground below the final landing.",
+      "Footsteps answer from one floor deeper each time."
+    ],
+    "sources": []
+  },
+  {
+    "id": "snowbound",
+    "category": "Isolation horror",
+    "title_angle": "The visitor outside the snowbound cabin",
+    "search_phrase": "cabin horror story",
+    "thumbnail_anchor": "frosted cabin window",
+    "thumbnail_visual_story": "A frosted cabin window on the right reveals a tall indistinct shadow beyond deep untouched snow",
+    "thumbnail_forbidden_terms": [
+      "gore",
+      "nudity"
+    ],
+    "facts": [
+      "An adult weather researcher is isolated by a blizzard.",
+      "A visitor knocks without leaving footprints.",
+      "The radio warns never to answer a voice that sounds familiar."
+    ],
+    "sources": []
+  },
+  {
+    "id": "doorbell",
+    "category": "Domestic paranormal horror",
+    "title_angle": "The doorbell that rings from inside",
+    "search_phrase": "scary bedtime story",
+    "thumbnail_anchor": "doorbell camera",
+    "thumbnail_visual_story": "A doorbell camera on the right shows an empty porch while an interior doorway holds a faint silhouette",
+    "thumbnail_forbidden_terms": [
+      "gore",
+      "nudity"
+    ],
+    "facts": [
+      "An adult homeowner receives doorbell alerts from inside the house.",
+      "The recordings are stamped several minutes in the future.",
+      "The final notification shows the homeowner standing outside."
+    ],
+    "sources": []
+  }
+]

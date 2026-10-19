@@ -1,0 +1,58 @@
+name: Complete free-model private video test
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: youtube-rezan-after-dark
+  cancel-in-progress: false
+jobs:
+  private-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Install free rendering models and tools (no Google credentials)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core espeak-ng
+          pip install -r requirements.txt
+          pip install 'torch==2.7.1' --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-cpu.txt
+          npm install --ignore-scripts --no-audit --no-fund @magenta/music@1.23.1
+      - name: Component checks
+        run: python -m unittest -v
+      - name: Generate complete original video without upload credentials
+        env:
+          IMAGE_BACKEND: cpu
+          CPU_IMAGE_STEPS: '16'
+          TTS_BACKEND: kokoro
+          CPU_TTS_VOICE: am_michael
+          CAPTION_BACKEND: cpu
+          MUSIC_BACKEND: magenta
+          DAILY_ENABLED: 'false'
+          UPLOAD_ENABLED: 'false'
+          OMP_NUM_THREADS: '2'
+          MKL_NUM_THREADS: '2'
+          HF_HUB_DISABLE_XET: '1'
+        run: python -u free_private_test.py render
+      - name: Store privately, upload privately, and wait for YouTube processing
+        env:
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+          EXPECTED_CHANNEL_ID: UCwNhdtzL9XZMIAMXm81UCbw
+          DAILY_ENABLED: 'false'
+          UPLOAD_ENABLED: 'true'
+        run: python -u free_private_test.py upload
+# No public artifacts, no public publishing, and no daily schedule.
+
+# WAV decoding and resampling use installed FFmpeg before CPU Whisper inference.

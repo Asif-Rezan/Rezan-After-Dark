@@ -1,0 +1,41 @@
+name: Resume saved private video upload
+on:
+  workflow_dispatch:
+    inputs:
+      saved_run:
+        description: Saved original video run to restore
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: youtube-rezan-after-dark
+  cancel-in-progress: false
+jobs:
+  resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Install upload dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          pip install -r requirements.txt
+      - name: Restore validated video and upload only to the intended channel
+        env:
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+          EXPECTED_CHANNEL_ID: UCwNhdtzL9XZMIAMXm81UCbw
+          DAILY_ENABLED: 'false'
+          SAVED_RUN_ID: ${{ inputs.saved_run }}
+        run: |
+          python -u free_private_test.py resume
+          python -u youtube_verify.py
+# Manual only; completed or ambiguous upload states prevent duplicate insertion. No paid generation, no re-render, no public publishing.

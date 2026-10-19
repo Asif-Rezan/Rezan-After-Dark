@@ -1,0 +1,59 @@
+name: Private cloud video test
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Component checks or live private test (credentials required)
+        type: choice
+        options:
+          - checks
+          - render
+          - private-upload
+        default: checks
+permissions:
+  contents: read
+concurrency:
+  group: youtube-rezan-after-dark
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install rendering dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core espeak-ng
+          pip install -r requirements.txt
+          pip install 'torch>=2.6,<3' --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-cpu.txt
+          npm install --ignore-scripts --no-audit --no-fund @magenta/music@1.23.1
+      - name: Component tests
+        run: python -m unittest -v
+      - name: Live render or private upload
+        if: inputs.mode != 'checks'
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          IMAGE_BACKEND: cpu
+          TTS_BACKEND: kokoro
+          CAPTION_BACKEND: cpu
+          MUSIC_BACKEND: magenta
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+          EXPECTED_CHANNEL_ID: UCwNhdtzL9XZMIAMXm81UCbw
+          IMAGE_MODEL: ${{ vars.IMAGE_MODEL }}
+          TTS_MODEL: ${{ vars.TTS_MODEL }}
+          TTS_VOICE: ${{ vars.TTS_VOICE }}
+          DAILY_ENABLED: 'false'
+          UPLOAD_ENABLED: ${{ inputs.mode == 'private-upload' && 'true' || 'false' }}
+        run: |
+          python workflow.py preflight
+          python workflow.py test
+# No schedule is registered until a complete private test passes.
+# No videos or narration are uploaded as public-repository artifacts.

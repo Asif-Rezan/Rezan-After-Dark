@@ -1,0 +1,198 @@
+name: Daily horror story publishing
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/private-video-trigger.txt']
+  schedule:
+    - cron: '0 0 * * *' # 06:00 Asia/Dhaka
+  workflow_dispatch:
+    inputs:
+      cleanup_run:
+        description: 'Optional completed daily run ID: retry private verification and cleanup only'
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: youtube-daily-rezan-after-dark
+  cancel-in-progress: false
+env:
+  SAVED_RUN_ID: ${{ inputs.cleanup_run || format('daily-{0}', github.run_id) }}
+  RUN_SCOPED_CLEANUP: 'true'
+  CONTENT_TYPE: horror-story
+  OUTPUT_DIR: output/horror-long-video
+  TTS_BACKEND: kokoro
+  CAPTION_BACKEND: cpu
+  MUSIC_BACKEND: magenta
+  IMAGE_BACKEND: cpu
+  CPU_TTS_VOICE: am_michael
+  CPU_IMAGE_WIDTH: '1024'
+  CPU_IMAGE_HEIGHT: '576'
+  CPU_IMAGE_STEPS: '16'
+  HF_HUB_DISABLE_XET: '1'
+  OMP_NUM_THREADS: '4'
+  MKL_NUM_THREADS: '4'
+  DAILY_ENABLED: 'true'
+  GENERATE_FRESH_STORY: 'true'
+  STORY_MODEL: openai/gpt-oss-120b
+  STORY_CHAPTER_WORD_TARGET: '84'
+  CPU_IMAGE_MODEL: segmind/SSD-1B
+jobs:
+  prepare:
+    if: ${{ !inputs.cleanup_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Install free narration and timing dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core espeak-ng
+          pip install -r requirements.txt
+          pip install 'torch==2.7.1' --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-cpu.txt
+      - name: Validate global timing and rendering helpers
+        run: python -m unittest -v
+      - name: Verify private upload readiness before generation
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+          EXPECTED_CHANNEL_ID: UCwNhdtzL9XZMIAMXm81UCbw
+          REQUIRE_PUBLIC_PUBLISH: 'false'
+        run: python oauth_check.py
+      - name: Generate fresh horror story and exact narration storyboard
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+        run: |
+          python -u long_video.py stage-story
+          python -u long_video.py prepare
+          python -u long_video.py storyboard
+          python -u long_video.py refine-plan
+      - name: Save preparation privately
+        env:
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+        run: python -u long_video.py save-preparation
+  images:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Install CPU illustration model dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          pip install -r requirements.txt
+          pip install 'torch==2.7.1' --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-cpu.txt
+      - name: Restore private visual plan
+        env:
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+        run: python -u long_video.py restore-images
+      - name: Generate distinct illustrated seven-second clips without Google credentials
+        run: python -u long_video.py generate-shard ${{ matrix.shard }}
+      - name: Save images and clips privately
+        id: save_shard
+        continue-on-error: true
+        env:
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+        run: python -u long_video.py save-shard ${{ matrix.shard }}
+      - name: Retry upload only using the same runner files
+        if: ${{ steps.save_shard.outcome == 'failure' }}
+        env:
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+        run: python -u long_video.py recover-shard ${{ matrix.shard }}
+      - name: Encrypt completed work if generation or Drive upload failed
+        if: ${{ failure() }}
+        env:
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+        run: python shard_backup.py pack ${{ matrix.shard }}
+      - name: Preserve encrypted work for upload-only recovery
+        if: ${{ failure() && hashFiles('shard-backup.enc') != '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: private-shard-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: shard-backup.enc
+          retention-days: 14
+          if-no-files-found: error
+  finish:
+    needs: images
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Install music, thumbnail and final rendering dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core
+          pip install -r requirements.txt
+          pip install 'torch==2.7.1' --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-cpu.txt
+          npm install --ignore-scripts --no-audit --no-fund @magenta/music@1.23.1
+      - name: Restore all private clips and narration
+        env:
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+        run: python -u long_video.py restore-clips
+      - name: Assemble 1080p video, generate original music and illustrated thumbnail
+        run: python -u long_video.py finish
+      - name: Upload privately to Rezan After Dark and verify actual HD video and metadata
+        env:
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+          EXPECTED_CHANNEL_ID: UCwNhdtzL9XZMIAMXm81UCbw
+        run: |
+          python -u long_video.py upload
+
+  publish-cleanup:
+    needs: finish
+    if: ${{ !cancelled() && (needs.finish.result == 'success' || inputs.cleanup_run != '') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Verify private HD upload and metadata, then clean this run only
+        env:
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+          EXPECTED_CHANNEL_ID: UCwNhdtzL9XZMIAMXm81UCbw
+        run: python -u daily_publish.py

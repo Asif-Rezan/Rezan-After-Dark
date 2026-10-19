@@ -1,0 +1,27 @@
+# Example only. Do not rename to render.yaml or deploy until the complete private
+# video test passes and billable cron usage is approved.
+services:
+  - type: cron
+    name: youtube-rezan-after-dark-daily
+    runtime: docker
+    schedule: "0 3 * * *"
+    dockerCommand: python workflow.py daily
+    envVars:
+      - key: DAILY_ENABLED
+        value: "false"
+      - key: UPLOAD_ENABLED
+        value: "false"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: HF_TOKEN
+        sync: false
+      - key: IMAGE_MODEL
+        sync: false
+      - key: YOUTUBE_TOKEN_JSON
+        sync: false
+      - key: EXPECTED_CHANNEL_ID
+        sync: false
+      - key: DRIVE_TOKEN_JSON
+        sync: false
+      - key: DRIVE_FOLDER_ID
+        sync: false
