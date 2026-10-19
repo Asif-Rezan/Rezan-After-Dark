@@ -27,7 +27,7 @@ The daily workflow is `.github/workflows/daily-upload.yml`. Run **Google OAuth c
 
 The source repository and its secrets, Drive folder, OAuth project, YouTube token, and schedule are independent of this repository. This repository's setup must be completed before its daily workflow can run successfully.
 
-Keep the OAuth app in **Production**, not Testing, before authorizing tokens to avoid the testing-mode seven-day refresh-token expiry. Google can still revoke authorization independently.
+The OAuth app was configured in **Production** on October 19, 2026, before authorizing tokens. Keep it in Production to avoid the testing-mode seven-day refresh-token expiry. Google can still revoke authorization independently.
 
 ## Local checks
 
