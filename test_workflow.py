@@ -152,19 +152,18 @@ class Checks(unittest.TestCase):
             self.assertEqual(len(prompts), 1)
             self.assertIn('limestone', prompts[0])
 
-    def test_global_seven_second_timeline_and_spoken_events(self):
+    def test_global_ten_second_timeline_and_spoken_events(self):
         from long_video import shot_plan
         story = {'scenes': [{'narration': 'She lifts a red suitcase.'},
                             {'narration': 'He repairs a broken clock.'}]}
         words = [[dict(word='suitcase', start=0, end=7.2)],
                  [dict(word='clock', start=0, end=8.3)]]
         plan = shot_plan(story, [7.2, 8.3], words)
-        self.assertEqual([s['start'] for s in plan['shots']], [0, 7, 14])
-        self.assertEqual([s['duration'] for s in plan['shots']], [7, 7, 1.5])
-        self.assertEqual(plan['shots'][0]['narration'], 'suitcase')
-        self.assertEqual(plan['shots'][1]['narration'], 'suitcase clock')
+        self.assertEqual([s['start'] for s in plan['shots']], [0, 10])
+        self.assertEqual([s['duration'] for s in plan['shots']], [10, 5.5])
+        self.assertEqual(plan['shots'][0]['narration'], 'suitcase clock')
+        self.assertEqual(plan['shots'][1]['narration'], 'clock')
         self.assertEqual(plan['shots'][1]['chapter'], 1)
-        self.assertEqual(plan['shots'][2]['narration'], 'clock')
         self.assertNotIn('prompt', plan['shots'][0])
         with self.assertRaises(ValueError):
             shot_plan(story, [7.2, 8.3], [[], []])
@@ -175,8 +174,8 @@ class Checks(unittest.TestCase):
             root = Path(temp)
             story = {'character_description': 'Maya, black hair, blue coat',
                      'scenes': [{'narration': 'Maya opens the red suitcase beside the station bench.'}]}
-            plan = shot_plan(story, [8], [[dict(word='red suitcase', start=0, end=6),
-                                         dict(word='station bench', start=7, end=8)]])
+            plan = shot_plan(story, [12], [[dict(word='red suitcase', start=0, end=6),
+                                         dict(word='station bench', start=7, end=12)]])
             (root/'story.json').write_text(json.dumps(story))
             (root/'plan.json').write_text(json.dumps(plan))
             with self.assertRaisesRegex(RuntimeError, 'storyboard'):
@@ -216,15 +215,15 @@ class Checks(unittest.TestCase):
             self.assertIn('horror illustration', workers['prompt'])
             self.assertNotIn('Recurring wizard', workers['prompt'])
 
-    def test_actual_seven_second_image_change(self):
+    def test_actual_ten_second_image_change(self):
         from long_video import picture_clip
         import subprocess
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             for i, color in enumerate(((230, 20, 20), (20, 20, 230))):
                 Image.new('RGB', (640, 360), color).save(root/f'{i}.png')
-                picture_clip(root/f'{i}.png', 7, root/f'{i}.mp4')
-                self.assertAlmostEqual(w.duration(root/f'{i}.mp4'), 7, places=2)
+                picture_clip(root/f'{i}.png', 10, root/f'{i}.mp4')
+                self.assertAlmostEqual(w.duration(root/f'{i}.mp4'), 10, places=2)
             (root/'list.txt').write_text("file '0.mp4'\nfile '1.mp4'\n")
             w.shell('ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', str(root/'list.txt'),
                 '-c', 'copy', str(root/'joined.mp4'))
@@ -232,7 +231,7 @@ class Checks(unittest.TestCase):
                 return subprocess.check_output(['ffmpeg', '-v', 'error', '-ss', str(at),
                     '-i', str(root/'joined.mp4'), '-frames:v', '1', '-s', '1x1',
                     '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1'])
-            before, after = pixel(6.8), pixel(7.2)
+            before, after = pixel(9.8), pixel(10.2)
             self.assertGreater(before[0], before[2])
             self.assertGreater(after[2], after[0])
 

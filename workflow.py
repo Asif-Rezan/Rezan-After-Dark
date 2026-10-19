@@ -56,8 +56,8 @@ def validate_story(data):
             if not isinstance(scene.get(field), str) or not scene[field].strip():
                 raise ValueError(f'Missing scene {field}')
         words += len(scene['narration'].split())
-    if not 1000 <= words <= 2600:
-        raise ValueError(f'Expected 1000–2600 narrated words, including duration revisions; received {words}')
+    if not 1000 <= words <= 3600:
+        raise ValueError(f'Expected 1000–3600 narrated words, including duration revisions; received {words}')
     if not isinstance(data.get('thumbnail_text'), str) or len(data['thumbnail_text']) > 45:
         raise ValueError('Invalid thumbnail text')
     if not isinstance(data.get('thumbnail_prompt'), str):
@@ -163,9 +163,9 @@ def make_story(day, previous):
     if len(outline.get('scenes', [])) != 20:
         raise ValueError('Outline requires exactly twenty chapters')
     summaries = [scene['summary'] for scene in outline['scenes']]
-    chapter_target = int(os.getenv('STORY_CHAPTER_WORD_TARGET', '84'))
-    if not 75 <= chapter_target <= 88:
-        raise ValueError('STORY_CHAPTER_WORD_TARGET must be between 75 and 88')
+    chapter_target = int(os.getenv('STORY_CHAPTER_WORD_TARGET', '110'))
+    if not 95 <= chapter_target <= 125:
+        raise ValueError('STORY_CHAPTER_WORD_TARGET must be between 95 and 125')
     prior = ''
     for begin in (0, 5, 10, 15):
         # Separate bursts fit the free plan; never switch to a paid provider.
@@ -179,8 +179,9 @@ def make_story(day, previous):
         Previous chapter ending: {prior[-700:]}.
         Return JSON with narrations: an object with the exact chapter keys {keys}, each value a narration string.
         Each string MUST contain approximately {chapter_target} English spoken words (within 5 words).
-        Across all twenty chapters, aim for 1,650–1,800 narrated words including the separately added final CTA.
+        Across all twenty chapters, aim for 2,100–2,300 narrated words including the separately added final CTA.
         Natural immersive horror narration with sensory details, tension and believable adult characters.
+        Use measured sentences and natural punctuation for slow, deliberate delivery; no spoken stage directions.
         Begin chapter 1 with a frightening discovery or immediate danger, no welcome or setup preamble.
         Develop the original fictional plot through discoveries, choices and consequences.
         End with an earned chilling twist that pays off earlier clues. Do not include any viewer call to action in any chapter;
@@ -251,7 +252,7 @@ def revise_story_duration(story, ratio, direction, indices=None):
         properties = {key: schema_text for key in batch}
         schema = {'type': 'object', 'properties': properties,
                   'required': batch, 'additionalProperties': False}
-        targets = {keys[i]: max(45, min(130, round(len(original[i].split()) * ratio)))
+        targets = {keys[i]: max(45, min(180, round(len(original[i].split()) * ratio)))
                    for i in selected}
         prompt = f'''Revise these chapters of an original fictional horror story to {direction} the
 spoken narration. Preserve character identities, supernatural rules, chronology, clues,
@@ -398,7 +399,7 @@ def subtitles(scenes, lengths, path):
     path.write_text('\n'.join(cues), encoding='utf-8')
 
 
-def check_video(path, min_duration=600, max_duration=900):
+def check_video(path, min_duration=900, max_duration=1200):
     metadata = probe(path)
     video = next(s for s in metadata['streams'] if s['codec_type'] == 'video')
     assert (video['width'], video['height']) == (1920, 1080), 'Wrong output dimensions'
@@ -716,7 +717,7 @@ def run(daily=False):
     root.mkdir(parents=True, exist_ok=True)
     store, key = Store(), f'runs/{run_id}/state.json'
     test_record = store.load('last-private-test.json', {}) if daily else {}
-    if daily and (not test_record.get('passed') or not test_record.get('remote_verification', {}).get('private_test_passed') or test_record.get('validation', {}).get('image_interval_seconds') != 7 or not test_record.get('validation', {}).get('storyboard_verified') or test_record.get('validation', {}).get('style') != 'horror-story'):
+    if daily and (not test_record.get('passed') or not test_record.get('remote_verification', {}).get('private_test_passed') or test_record.get('validation', {}).get('image_interval_seconds') != 10 or not test_record.get('validation', {}).get('storyboard_verified') or test_record.get('validation', {}).get('style') != 'horror-story'):
         raise RuntimeError('No fully verified private HD upload test is recorded')
     state = store.load(key, {})
     if state.get('phase') in ('upload_started', 'uploaded', 'complete', 'published', 'verified_private'):

@@ -33,8 +33,8 @@ def render():
         lengths.append(w.render_scene(image, audio, clip))
         clips.append(clip)
         print(json.dumps({'scene': i+1, 'phase': 'rendered', 'seconds': lengths[-1], 'caption_words': len(words)}), flush=True)
-    if not 180 <= sum(lengths) <= 600:
-        raise RuntimeError('Narration duration outside 3–10 minutes')
+    if not 900 <= sum(lengths) <= 1200:
+        raise RuntimeError('Narration duration outside 15–20 minutes')
     w.aligned_subtitles(word_lists, lengths, ROOT/'captions.srt')
     (ROOT/'clips.txt').write_text(''.join(f"file '{p.name}'\n" for p in clips))
     w.shell('ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', str(ROOT/'clips.txt'),

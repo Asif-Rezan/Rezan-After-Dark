@@ -2,7 +2,7 @@
 
 Adapted from `Asif-Rezan/youtube-dark-psychology-automation` at commit `4556280dad46cbfbec6e4f49ae75224a6155b974`.
 
-Creates one original English fictional horror video daily for **Rezan After Dark** (`UCwNhdtzL9XZMIAMXm81UCbw`), with private uploads at **06:00 Asia/Dhaka**. The reference workflow is preserved: twenty chapters, 10–15 minute measured narration, twenty CPU image workers, a new image every seven seconds, Kokoro voice, captions, original music, readable thumbnails, upload verification and recoverable private Drive checkpoints.
+Creates one original English fictional horror video daily for **Rezan After Dark** (`UCwNhdtzL9XZMIAMXm81UCbw`), with private uploads at **06:00 Asia/Dhaka**. The reference workflow is preserved: twenty chapters, 15–20 minute measured narration, twenty CPU image workers, a new image every ten seconds, Kokoro voice, captions, original music, readable thumbnails, upload verification and recoverable private Drive checkpoints.
 
 Groq is the only text API provider. Temporary failures retry Groq with bounded backoff; persistent failures stop without switching providers. No Gemini API, key or fallback is used. Image generation, narration, captions and music retain the reference's CPU backends.
 
@@ -35,17 +35,17 @@ The OAuth app was configured in **Production** on October 19, 2026, before autho
 
 ## Story duration recovery
 
-Fresh daily stories keep the twenty-chapter fictional horror outline and target 84
+Fresh daily stories keep the twenty-chapter fictional horror outline and target 110
 spoken words per chapter, plus the closing CTA. Set `STORY_CHAPTER_WORD_TARGET`
-between 75 and 88 to tune the initial request. Actual Kokoro audio duration,
-not word count, controls acceptance: 600–900 seconds is required, with 720–840
+between 95 and 125 to tune the initial request. Actual Kokoro audio duration,
+not word count, controls acceptance: 900–1200 seconds is required, with 1020–1140
 seconds preferred.
 
 Preparation measures every chapter before making images. A slight overrun uses
 at most a 4% FFmpeg tempo correction. Larger overruns use Groq to shorten
 selected chapters; underruns use Groq to add relevant suspense, sensory details and character actions.
 At most three correction attempts run. Changed chapters alone are resynthesized,
-then word timestamps, captions, and every seven-second visual window are rebuilt.
+then word timestamps, captions, and every ten-second visual window are rebuilt.
 Audio and transcript caches are tied to content hashes so changed text cannot
 reuse stale timing. The corrected story, narration, captions, storyboard source
 hash, and validated duration are checkpointed together before the twenty image
@@ -106,3 +106,5 @@ before continuing those stages.
 ## Horror audio atmosphere
 
 Original MusicRNN notes are voiced as sparse A-minor chimes over slowly shifting low drones and subtle pulses at 52 BPM. Soft fades and restrained levels avoid abrupt stingers; the existing loudness normalization and narration ducking keep speech clear. No music-generation API or additional key is needed.
+
+Narration uses Kokoro `am_michael` at speed `0.82`, with a gentle two-semitone pitch reduction. Pitch processing preserves duration; changed voice settings invalidate cached audio and captions. Measured narration must be 15–20 minutes, targeting 18 minutes, with images changing every 10 seconds (the final image may be shorter).

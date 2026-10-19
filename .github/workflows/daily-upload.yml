@@ -26,6 +26,8 @@ env:
   MUSIC_BACKEND: magenta
   IMAGE_BACKEND: cpu
   CPU_TTS_VOICE: am_michael
+  CPU_TTS_SPEED: '0.82'
+  CPU_TTS_PITCH_SEMITONES: '-2'
   CPU_IMAGE_WIDTH: '1024'
   CPU_IMAGE_HEIGHT: '576'
   CPU_IMAGE_STEPS: '16'
@@ -35,7 +37,7 @@ env:
   DAILY_ENABLED: 'true'
   GENERATE_FRESH_STORY: 'true'
   STORY_MODEL: openai/gpt-oss-120b
-  STORY_CHAPTER_WORD_TARGET: '84'
+  STORY_CHAPTER_WORD_TARGET: '110'
   CPU_IMAGE_MODEL: segmind/SSD-1B
 jobs:
   prepare:
@@ -110,7 +112,7 @@ jobs:
           DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
         run: python -u long_video.py restore-images
-      - name: Generate distinct illustrated seven-second clips without Google credentials
+      - name: Generate distinct illustrated ten-second clips without Google credentials
         run: python -u long_video.py generate-shard ${{ matrix.shard }}
       - name: Save images and clips privately
         id: save_shard

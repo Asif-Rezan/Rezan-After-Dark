@@ -1,4 +1,4 @@
-"""10–15 minute videos with a distinct image every seven seconds."""
+"""15–20 minute videos with a distinct image every ten seconds."""
 import datetime as dt
 import hashlib
 import json
@@ -9,9 +9,10 @@ import sys
 from zoneinfo import ZoneInfo
 import workflow as w
 import duration_control as dc
+from voice_cpu import voice_settings
 
 ROOT = Path(os.getenv('OUTPUT_DIR', 'output/horror-long-video'))
-INTERVAL = 7
+INTERVAL = 10
 SHARDS = 20
 ASSETS = ('story.json', 'plan.json', 'narration.wav', 'captions.srt', 'duration.json')
 HORROR_STYLE = ('atmospheric cinematic horror illustration, consistent adult characters, '
@@ -24,7 +25,7 @@ def run_id():
 
 
 def shot_plan(story, lengths, word_lists):
-    """Anchor every visual to words actually spoken in its global seven-second window."""
+    """Anchor every visual to words actually spoken in its global ten-second window."""
     if len(lengths) != len(word_lists) or len(lengths) != len(story['scenes']):
         raise ValueError('Chapter audio, transcript and story must agree')
     total = sum(lengths)
@@ -78,7 +79,7 @@ def storyboard(root=ROOT, ask=None, pause=None):
                   'required': list(properties), 'additionalProperties': False}
         context = {str(shot['chapter']): story['scenes'][shot['chapter']]['narration'] for shot in batch}
         prompt = f"""Storyboard this original fictional horror story. Return one image prompt per exact shot key.
-Each shot is a measured seven-second narration window. Depict the concrete action,
+Each shot is a measured ten-second narration window. Depict the concrete action,
 character, object or disturbing discovery being narrated. Chapter text resolves context only;
 never illustrate a later or earlier event. Show subtle dread through setting, light and composition.
 Preserve recurring adult character appearance: {story.get('character_description', '')}.
@@ -124,8 +125,9 @@ def file_hash(path):
 
 
 def text_fingerprint(text):
+    speed, pitch = voice_settings()
     settings = (text, os.getenv('TTS_BACKEND', 'kokoro'),
-                os.getenv('CPU_TTS_VOICE', 'am_michael'), 'kokoro-speed-0.9-v1')
+                os.getenv('CPU_TTS_VOICE', 'am_michael'), speed, pitch, 'horror-voice-v2')
     return hashlib.sha256(json.dumps(settings).encode()).hexdigest()
 
 
@@ -244,7 +246,7 @@ def correct_duration(story, root):
         print(json.dumps({'corrected_duration_seconds': round(total, 2),
                           'duration_validation': 'PASSED' if dc.valid(total) else 'OUT OF RANGE'}), flush=True)
     if not dc.valid(total):
-        raise RuntimeError(f'Narration duration {total:.2f}s remains outside 600–900s after '
+        raise RuntimeError(f'Narration duration {total:.2f}s remains outside 900–1200s after '
                            f'{dc.MAX_ATTEMPTS} correction attempts; no images or upload started')
     return story, lengths
 
@@ -274,11 +276,11 @@ def prepare(story=None, root=ROOT):
     if not dc.valid(measured) or abs(measured-total) > .15:
         raise RuntimeError(f'Concatenated narration {measured:.2f}s does not match validated chapters {total:.2f}s')
     plan = shot_plan(story, lengths, word_lists)
-    plan['source_hash'] = hashlib.sha256(json.dumps({'story': story,
+    plan['source_hash'] = hashlib.sha256(json.dumps({'story': story, 'image_interval_seconds': INTERVAL,
         'audio_hashes': [file_hash(p) for p in audios], 'words': word_lists},
         sort_keys=True).encode()).hexdigest()
     previous = read_cache(root/'plan.json')
-    if previous.get('source_hash') == plan['source_hash'] and previous.get('storyboard_verified'):
+    if previous.get('source_hash') == plan['source_hash'] and previous.get('storyboard_verified') and previous.get('image_interval_seconds') == INTERVAL:
         plan = previous
     (root/'plan.json').write_text(json.dumps(plan, indent=2))
     (root/'duration.json').write_text(json.dumps({'duration_seconds': measured,
@@ -429,10 +431,10 @@ def finish(root=ROOT):
     plan = json.loads((root/'plan.json').read_text())
     clips = [root/f"shot-{s['index']:03}.mp4" for s in plan['shots']]
     if not all(p.exists() for p in clips):
-        raise RuntimeError('Not every seven-second image clip exists')
+        raise RuntimeError('Not every ten-second image clip exists')
     for shot, clip in zip(plan['shots'], clips):
         if abs(w.duration(clip)-shot['duration']) > .04:
-            raise RuntimeError('Shot timing differs from the global seven-second plan')
+            raise RuntimeError('Shot timing differs from the global ten-second plan')
     (root/'clips.txt').write_text(''.join(f"file '{p.name}'\n" for p in clips))
     w.shell('ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', str(root/'clips.txt'), '-c', 'copy', str(root/'joined.mp4'))
     if not (root/'music.audio').exists():
@@ -453,7 +455,8 @@ def finish(root=ROOT):
     print(json.dumps({'visual_quality_advisory_count': len(advisory_shots), 'shot_indices': advisory_shots}), flush=True)
     report = {'render_passed': True, 'duration_seconds': float(metadata['format']['duration']),
         'width': 1920, 'height': 1080, 'images': len(clips), 'image_interval_seconds': INTERVAL,
-        'style': 'horror-story', 'privacy': 'private', 'voice': 'Kokoro am_michael',
+        'style': 'horror-story', 'privacy': 'private', 'voice': 'Kokoro am_michael', 'voice_speed': voice_settings()[0],
+        'voice_pitch_semitones': voice_settings()[1],
         'music': 'Magenta MusicRNN horror atmosphere', 'image_model': os.getenv('CPU_IMAGE_MODEL', 'segmind/SSD-1B'),
         'audio_validation': audio_report, 'timeline_verified': True, 'storyboard_verified': plan.get('storyboard_verified', False),
         'alignment': plan.get('alignment'), 'scene_composition_version': plan.get('scene_composition_version'),
@@ -602,7 +605,7 @@ def restore_clips():
         name = f"shot-{shot['index']:03}.mp4"
         file_id = store.find(f'runs/{run_id()}/{name}')
         if not file_id:
-            raise RuntimeError('Saved seven-second clip missing')
+            raise RuntimeError('Saved ten-second clip missing')
         store.download(file_id, ROOT/name)
         qa_name = f"shot-{shot['index']:03}.qa.json"
         qa_id = store.find(f'runs/{run_id()}/{qa_name}')

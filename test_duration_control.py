@@ -25,16 +25,16 @@ def story_fixture():
 
 class DurationDecisionTests(unittest.TestCase):
     def test_requested_duration_boundaries(self):
-        expected = {580: False, 600: True, 720: True, 840: True, 900: True,
-                    904.3: False, 1000: False, 1200: False}
+        expected = {880: False, 900: True, 1020: True, 1140: True, 1200: True,
+                    1204.3: False, 1300: False, 1500: False}
         for seconds, accepted in expected.items():
             with self.subTest(seconds=seconds):
                 self.assertEqual(dc.valid(seconds), accepted)
-        self.assertIsNone(dc.tempo_factor(1000))
-        self.assertAlmostEqual(dc.tempo_factor(904.3), 904.3/dc.TEMPO_TARGET)
+        self.assertIsNone(dc.tempo_factor(1300))
+        self.assertAlmostEqual(dc.tempo_factor(1204.3), 1204.3/dc.TEMPO_TARGET)
 
     def test_valid_audio_does_not_regenerate_or_rewrite(self):
-        for total in (600, 720, 840, 900):
+        for total in (900, 1020, 1140, 1200):
             with self.subTest(total=total), tempfile.TemporaryDirectory() as temp:
                 story = story_fixture()
                 with patch('long_video.ensure_chapter_audio', return_value=total/20) as audio, \
@@ -47,19 +47,19 @@ class DurationDecisionTests(unittest.TestCase):
                 revise.assert_not_called()
                 tempo.assert_not_called()
 
-    def test_904_point_3_uses_minimal_tempo(self):
+    def test_1204_point_3_uses_minimal_tempo(self):
         story = story_fixture()
         with tempfile.TemporaryDirectory() as temp, \
-             patch('long_video.ensure_chapter_audio', return_value=904.3/20), \
-             patch('long_video.adjust_tempo', return_value=[899.8/20]*20) as tempo, \
+             patch('long_video.ensure_chapter_audio', return_value=1204.3/20), \
+             patch('long_video.adjust_tempo', return_value=[1199.8/20]*20) as tempo, \
              patch('workflow.revise_story_duration') as revise:
             _, lengths = lv.correct_duration(story, Path(temp))
-        self.assertAlmostEqual(sum(lengths), 899.8)
-        self.assertAlmostEqual(tempo.call_args.args[-1], 904.3/dc.TEMPO_TARGET)
+        self.assertAlmostEqual(sum(lengths), 1199.8)
+        self.assertAlmostEqual(tempo.call_args.args[-1], 1204.3/dc.TEMPO_TARGET)
         revise.assert_not_called()
 
     def test_shortening_and_expansion_regenerate_only_selected_chapters(self):
-        for total, direction in ((580, 'expand'), (1000, 'shorten'), (1200, 'shorten')):
+        for total, direction in ((880, 'expand'), (1300, 'shorten'), (1500, 'shorten')):
             with self.subTest(total=total), tempfile.TemporaryDirectory() as temp:
                 original = story_fixture()
                 current_ratio = [1.0]
@@ -84,13 +84,13 @@ class DurationDecisionTests(unittest.TestCase):
     def test_three_attempt_limit_and_groq_failure_preserve_original(self):
         original = story_fixture()
         with tempfile.TemporaryDirectory() as temp, \
-             patch('long_video.ensure_chapter_audio', return_value=50), \
+             patch('long_video.ensure_chapter_audio', return_value=65), \
              patch('workflow.revise_story_duration', return_value=original) as revise:
             with self.assertRaisesRegex(RuntimeError, 'after 3 correction attempts'):
                 lv.correct_duration(original, Path(temp))
             self.assertEqual(revise.call_count, 3)
         with tempfile.TemporaryDirectory() as temp, \
-             patch('long_video.ensure_chapter_audio', return_value=50), \
+             patch('long_video.ensure_chapter_audio', return_value=65), \
              patch('workflow.revise_story_duration', side_effect=RuntimeError('Groq unavailable')):
             with self.assertRaisesRegex(RuntimeError, 'Groq unavailable'):
                 lv.correct_duration(original, Path(temp))
@@ -107,7 +107,7 @@ class CacheAndAlignmentTests(unittest.TestCase):
                 synthesized.append(text)
                 path.write_bytes(text.encode())
             def seconds(path):
-                return 800 if path.name == 'narration.wav' else 40
+                return 1000 if path.name == 'narration.wav' else 50
             def shell(*args):
                 Path(args[-1]).write_bytes(b'joined narration')
             with patch('long_video.w.make_narration', side_effect=make), \
@@ -130,7 +130,7 @@ class CacheAndAlignmentTests(unittest.TestCase):
                 self.assertNotEqual(third['source_hash'], old_hash)
                 self.assertNotIn('storyboard_verified', third)
                 self.assertEqual(third['shots'][0]['start'], 0)
-                self.assertEqual(third['shots'][1]['start'], 7)
+                self.assertEqual(third['shots'][1]['start'], 10)
 
     def test_audio_and_transcript_hashes_invalidate_stale_chapter(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -168,7 +168,7 @@ class CacheAndAlignmentTests(unittest.TestCase):
             transcribe.assert_called_once()
             self.assertEqual(words[0]['word'], 'Maya')
             plan = lv.shot_plan(story, lengths, [words])
-            self.assertEqual(plan['image_interval_seconds'], 7)
+            self.assertEqual(plan['image_interval_seconds'], 10)
             self.assertEqual(plan['shots'][0]['narration'], 'Maya')
 
     def test_rebuild_and_checkpoint_reject_stale_story(self):
@@ -177,7 +177,7 @@ class CacheAndAlignmentTests(unittest.TestCase):
             story = story_fixture()
             (root/'story.json').write_text(json.dumps(story))
             (root/'plan.json').write_text(json.dumps({'source_hash': 'current', 'storyboard_verified': True}))
-            (root/'duration.json').write_text(json.dumps({'duration_seconds': 810,
+            (root/'duration.json').write_text(json.dumps({'duration_seconds': 1080,
                 'story_sha256': lv.file_hash(root/'story.json'), 'plan_source_hash': 'current'}))
             lv.verify_preparation(root, images_only=True)
             story['scenes'][0]['narration'] += ' changed'
