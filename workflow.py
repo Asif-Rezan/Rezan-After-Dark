@@ -614,7 +614,7 @@ def load_music(store, root):
     if os.getenv('MUSIC_BACKEND', 'magenta') == 'magenta':
         from music_cpu import generate
         generate(root/'music.audio')
-        return 'Background music: original Magenta MusicRNN melody with synthesized ambient piano.'
+        return 'Background music: original Magenta MusicRNN composition with synthesized horror drones, sparse minor-key chimes and subtle pulses.'
     # Only free sources. vidIQ-generated assets are not accepted.
     manifest = store.load('music-manifest.json', None)
     if not manifest or manifest.get('source') not in ('YouTube Audio Library', 'AI-generated (free local model)'):

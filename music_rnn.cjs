@@ -8,8 +8,8 @@ async function main() {
   await tf.ready();
   const model = new MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/basic_rnn');
   await model.initialize();
-  // Newly composed seed phrase, not a borrowed song.
-  const pitches = [60, 64, 67, 69, 67, 64, 62, 60];
+  // Original A-minor seed; the renderer adds sparse horror textures.
+  const pitches = [57, 60, 64, 59, 57, 65, 64, 60];
   const primer = {quantizationInfo: {stepsPerQuarter: 4}, totalQuantizedSteps: 32,
     notes: pitches.map((pitch, i) => ({pitch, quantizedStartStep: i * 4, quantizedEndStep: i * 4 + 3}))};
   const result = await model.continueSequence(primer, 256, 0.7);

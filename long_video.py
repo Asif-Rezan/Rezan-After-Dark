@@ -454,7 +454,7 @@ def finish(root=ROOT):
     report = {'render_passed': True, 'duration_seconds': float(metadata['format']['duration']),
         'width': 1920, 'height': 1080, 'images': len(clips), 'image_interval_seconds': INTERVAL,
         'style': 'horror-story', 'privacy': 'private', 'voice': 'Kokoro am_michael',
-        'music': 'Magenta MusicRNN', 'image_model': os.getenv('CPU_IMAGE_MODEL', 'segmind/SSD-1B'),
+        'music': 'Magenta MusicRNN horror atmosphere', 'image_model': os.getenv('CPU_IMAGE_MODEL', 'segmind/SSD-1B'),
         'audio_validation': audio_report, 'timeline_verified': True, 'storyboard_verified': plan.get('storyboard_verified', False),
         'alignment': plan.get('alignment'), 'scene_composition_version': plan.get('scene_composition_version'),
         'semantic_checked_images': sum(r.get('required', False) for r in scene_reports),
@@ -630,7 +630,7 @@ def upload():
         store.upload(ROOT/name, f'runs/{run_id()}/{name}')
     store.save(key, state)
     w.upload_private(ROOT/'video.mp4', ROOT/'thumbnail.jpg', story, state, store, key,
-        'Background music: original Magenta MusicRNN melody with synthesized ambient piano.')
+        'Background music: original Magenta MusicRNN composition with synthesized horror drones, sparse minor-key chimes and subtle pulses.')
     history.append({'title': story['title'], 'hash': digest, 'run': run_id(),
         'video_id': state['video_id'], 'format': story.get('format'), 'topic_id': story.get('topic_id'),
         'plot': ' '.join(scene.get('summary', '') for scene in story['scenes'])})

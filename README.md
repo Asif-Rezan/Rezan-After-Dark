@@ -102,3 +102,7 @@ an upload: the old workflow reruns generation on a fresh runner and uses its old
 code revision. Successful upload-only shard recovery does not automatically
 assemble or upload a video; inspect all shard results and existing YouTube state
 before continuing those stages.
+
+## Horror audio atmosphere
+
+Original MusicRNN notes are voiced as sparse A-minor chimes over slowly shifting low drones and subtle pulses at 52 BPM. Soft fades and restrained levels avoid abrupt stingers; the existing loudness normalization and narration ducking keep speech clear. No music-generation API or additional key is needed.
