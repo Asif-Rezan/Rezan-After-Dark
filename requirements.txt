@@ -7,3 +7,4 @@ numpy>=1.26,<3
 google-auth-oauthlib>=1.2,<2
 
 cryptography>=44,<47
+jsonschema>=4.23,<5

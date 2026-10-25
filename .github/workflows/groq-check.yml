@@ -2,32 +2,25 @@ name: Groq authorization check
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/groq-check.yml']
+    paths: ['.github/workflows/groq-check.yml', 'groq_check.py', 'groq_client.py', 'workflow.py']
   workflow_dispatch:
 permissions:
   contents: read
+env:
+  STORY_MODEL: openai/gpt-oss-120b
 jobs:
   check:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - name: Check existing Actions secret without printing it
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - run: pip install 'requests>=2.32,<3' 'jsonschema>=4.23,<5'
+      - name: Verify real Groq structured generation without printing content
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        shell: python
-        run: |
-          import json, os, urllib.request, urllib.error
-          key = os.getenv('GROQ_API_KEY', '')
-          if not key:
-              print(json.dumps({'groq_configured': False, 'groq_authorized': False}))
-          else:
-              request = urllib.request.Request('https://api.groq.com/openai/v1/models',
-                  headers={'Authorization': 'Bearer '+key, 'User-Agent': 'YoutubeAutomation/1.0'})
-              try:
-                  with urllib.request.urlopen(request, timeout=30) as response:
-                      ids = {m['id'] for m in json.load(response).get('data', [])}
-                  print(json.dumps({'groq_configured': True, 'groq_authorized': True,
-                      'story_model_available': 'openai/gpt-oss-120b' in ids}))
-              except urllib.error.HTTPError as error:
-                  print(json.dumps({'groq_configured': True, 'groq_authorized': False, 'http_status': error.code}))
-                  raise SystemExit(1)
+        run: python -u groq_check.py

@@ -4,7 +4,7 @@ Adapted from `Asif-Rezan/youtube-dark-psychology-automation` at commit `4556280d
 
 Creates one original English fictional horror video daily for **Rezan After Dark** (`UCwNhdtzL9XZMIAMXm81UCbw`), with private uploads at **06:00 Asia/Dhaka**. The reference workflow is preserved: twenty chapters, 15–20 minute measured narration, twenty CPU image workers, a new image every ten seconds, Kokoro voice, captions, original music, readable thumbnails, upload verification and recoverable private Drive checkpoints.
 
-Groq is the only text API provider. Temporary failures retry Groq with bounded backoff; persistent failures stop without switching providers. No Gemini API, key or fallback is used. Image generation, narration, captions and music retain the reference's CPU backends.
+Groq is the only text API provider. Temporary failures retry Groq with bounded backoff. Recognized structured-generation failures retry strict output once, then recover using Groq JSON mode with local validation against the identical schema. Persistent failures stop without switching providers. No Gemini API, key or fallback is used. Image generation, narration, captions and music retain the reference's CPU backends.
 
 ## Horror stories and visuals
 
@@ -108,3 +108,32 @@ before continuing those stages.
 Original MusicRNN notes are voiced as sparse A-minor chimes over slowly shifting low drones and subtle pulses at 52 BPM. Soft fades and restrained levels avoid abrupt stingers; the existing loudness normalization and narration ducking keep speech clear. No music-generation API or additional key is needed.
 
 Narration uses Kokoro `am_michael` at speed `0.82`, with a gentle two-semitone pitch reduction. Pitch processing preserves duration; changed voice settings invalidate cached audio and captions. Measured narration must be 15–20 minutes, targeting 18 minutes, with images changing every 10 seconds (the final image may be shorter).
+
+## Groq generation readiness and recovery
+
+The daily job runs `groq_check.py` before installing CPU dependencies. It exercises
+`STORY_MODEL` with the same twenty-chapter JSON schema and token budget as the
+real outline request, using placeholder content. **Groq authorization check** also
+runs this check when its client/request code changes and can be dispatched manually.
+No generated content or credentials are printed.
+
+Groq requests have a five-attempt total budget. Rate limits, transport failures,
+and temporary server failures back off and respect a bounded Retry-After.
+Recognized JSON generation failures retry, with JSON-mode recovery on the same
+model after repeated strict failures. Unsupported structured formats can recover
+immediately through JSON mode. Every recovered response must pass the original
+JSON schema locally; incomplete, invalid, or wrong-schema output is never accepted.
+Authentication, model-access, context-limit and unknown request errors stop
+immediately with a privacy-safe category, HTTP status, known provider code,
+allowlisted parameter and request ID when available. Raw error messages and
+`failed_generation` can contain unpublished content, so they are not logged.
+Unknown messages receive a correlation fingerprint instead.
+
+If readiness fails, inspect that step before rerunning the full pipeline:
+`authentication_failed` needs a valid repository Groq secret; `access_denied` or
+`model_unavailable` needs provider/model access repaired; `context_limit` or
+`token_budget_rejected` needs the request budget reviewed. Do not repeatedly
+rerun an unchanged permanent error. A healthy readiness check is necessary but
+full generation still depends on provider capacity and the actual story request.
+Daily runners are pinned to Ubuntu 24.04 and checkout/setup-python use Node 24
+releases to avoid implicit runner/runtime migrations.

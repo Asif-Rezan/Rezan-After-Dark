@@ -66,52 +66,12 @@ def validate_story(data):
 
 
 def request_groq(endpoint, payload, binary=False):
-    """Use Groq only, with bounded retries for temporary failures."""
-    import math
-    import requests
-    key = required('GROQ_API_KEY')
-    for attempt in range(5):
-        delay = min(2 ** (attempt + 1), 30)
-        try:
-            response = requests.post('https://api.groq.com/openai/v1/' + endpoint,
-                headers={'Authorization': 'Bearer ' + key}, json=payload, timeout=180)
-        except requests.RequestException:
-            if attempt == 4:
-                raise RuntimeError('Groq transport failed after five attempts') from None
-        else:
-            if response.ok:
-                if binary:
-                    return response.content
-                try:
-                    result = response.json()
-                    choice = result['choices'][0]
-                    if choice.get('finish_reason') != 'stop' or not choice['message'].get('content'):
-                        raise ValueError('Incomplete response')
-                    json.loads(choice['message']['content'])
-                    return result
-                except (ValueError, KeyError, IndexError, TypeError):
-                    raise RuntimeError('Groq returned incomplete or invalid JSON') from None
-            if response.status_code not in (429, 500, 502, 503, 504) or attempt == 4:
-                raise RuntimeError(f'Groq request failed with HTTP {response.status_code}')
-            retry_after = response.headers.get('retry-after')
-            if retry_after:
-                try:
-                    seconds = float(retry_after)
-                except (TypeError, ValueError):
-                    seconds = 0
-                if not math.isfinite(seconds) or seconds > 120:
-                    raise RuntimeError('Groq cooldown exceeds retry budget; retry the workflow later')
-                delay = max(delay, math.ceil(seconds))
-        print(json.dumps({'check': 'Groq temporary failure', 'attempt': attempt + 1,
-                          'retry_seconds': delay}), flush=True)
-        time.sleep(delay)
+    """Use Groq only, preserving schema validation during bounded recovery."""
+    from groq_client import request_json
+    return request_json(endpoint, payload, required('GROQ_API_KEY'), binary)
 
 
-def make_story(day, previous):
-    if os.getenv('STORY_FILE'):
-        # Explicit original test story only; daily jobs must generate fresh stories.
-        return validate_story(json.loads(Path(os.environ['STORY_FILE']).read_text()))
-    model = os.getenv('STORY_MODEL', 'openai/gpt-oss-120b')
+def story_outline_schema():
     def object_schema(properties):
         return {'type': 'object', 'properties': properties,
             'required': list(properties), 'additionalProperties': False}
@@ -119,10 +79,23 @@ def make_story(day, previous):
     scene_schema = object_schema({'summary': text_schema, 'image_prompt': text_schema,
         'image_prompts': {'type': 'array', 'items': text_schema}})
     chapter_keys = [f'chapter_{i:02}' for i in range(1, 21)]
-    outline_schema = object_schema({**{k: text_schema for k in
+    return object_schema({**{k: text_schema for k in
         ('title', 'description', 'thumbnail_text', 'thumbnail_prompt', 'character_description', 'protagonist_name')},
         'tags': {'type': 'array', 'items': text_schema},
         'scenes': object_schema({k: scene_schema for k in chapter_keys})})
+
+
+def make_story(day, previous):
+    if os.getenv('STORY_FILE'):
+        # Explicit original test story only; daily jobs must generate fresh stories.
+        return validate_story(json.loads(Path(os.environ['STORY_FILE']).read_text()))
+    model = os.getenv('STORY_MODEL', 'openai/gpt-oss-120b')
+    chapter_keys = [f'chapter_{i:02}' for i in range(1, 21)]
+    text_schema = {'type': 'string'}
+    def object_schema(properties):
+        return {'type': 'object', 'properties': properties,
+                'required': list(properties), 'additionalProperties': False}
+    outline_schema = story_outline_schema()
     def ask(prompt, limit, schema):
         result = request_groq('chat/completions', {'model': model,
             'messages': [{'role': 'user', 'content': prompt}],

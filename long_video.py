@@ -654,7 +654,7 @@ if __name__ == '__main__':
         actions[command]()
     except Exception as error:
         print(json.dumps({'command': command, 'passed': False, 'error_type': type(error).__name__,
-            'http_status': getattr(getattr(error, 'resp', None), 'status', None),
+            'http_status': getattr(error, 'http_status', getattr(getattr(error, 'resp', None), 'status', None)),
             'reason': str(error) if isinstance(error, (RuntimeError, ValueError)) else type(error).__name__}), flush=True)
         if command in ('prepare', 'generate-shard', 'finish'):
             raise
