@@ -16,3 +16,6 @@ preshed==3.0.10
 blis==1.3.0
 numpy==2.2.6
 en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+# spaCy 3.8 imports Click directly; keep its compatible Typer CLI dependency.
+typer==0.16.0
+click==8.2.1
