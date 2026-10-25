@@ -84,13 +84,26 @@ def story_outline_schema():
         'scenes': object_schema({k: scene_schema for k in chapter_keys})})
 
 
-def narration_batch(prompt, keys, target, ask):
-    """Measure actual words; smaller local models may ignore a length instruction."""
-    properties = {key: {'type': 'string'} for key in keys}
+def narration_schema(keys, target):
+    """Constrain English words in the decoder, including final sentence punctuation."""
+    lower, upper = max(85, target - 10), target + 20
+    word = r"[A-Za-z0-9][A-Za-z0-9,.;:!?'\-]*"
+    final_word = r"[A-Za-z0-9][A-Za-z0-9'\-]*[.!?]"
+    pattern = '^' + word + '( ' + word + '){' + str(lower - 2) + ',' + str(upper - 2) + '} ' + final_word + '$'
+    properties = {key: {'type': 'string', 'pattern': pattern} for key in keys}
     schema = {'type': 'object', 'properties': {'narrations': {
         'type': 'object', 'properties': properties, 'required': keys, 'additionalProperties': False}},
         'required': ['narrations'], 'additionalProperties': False}
+    return schema
+
+
+def narration_batch(prompt, keys, target, ask):
+    """Constrain, then independently measure words before accepting narration."""
+    schema = narration_schema(keys, target)
     lower, upper = max(85, target - 10), target + 20
+    prompt += ('\nUse plain English narration with ASCII punctuation. Separate words with one space. '
+               'Use indirect speech without quotation marks or paragraph breaks. Finish with a complete sentence. '
+               f'The decoder requires {lower}-{upper} words in EVERY chapter; develop the event fully.')
     feedback = ''
     for attempt in range(3):
         group = ask(prompt + feedback, 4200, schema)

@@ -151,8 +151,9 @@ empty. Launch a new run; rerunning an old failed run uses its old commit.
 The previous hosted text client, authorization workflow and hosted audio
 backends have been removed. The old text API secret is unused and unnecessary.
 
-Qwen narration batches are checked using actual word counts, not the model's
-claim about length. At the default 110-word target, each chapter must contain
+Qwen narration schemas constrain the decoder to the requested word range using
+a bounded English-word pattern, with ordinary ASCII punctuation and a sentence
+ending. Actual word counts are checked independently afterward. At the default 110-word target, each chapter must contain
 100–130 words before audio generation. Short/long batches receive their measured
 counts and prior draft for a bounded rewrite, with at most three attempts.
 Persistent length failure stops before producing video assets. Measured audio

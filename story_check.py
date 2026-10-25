@@ -4,22 +4,22 @@ import os
 from pathlib import Path
 
 from story_cpu import MODEL_ID, StoryGenerationError, request_story
+from workflow import narration_batch
 
 
 def check():
-    result = request_story('chat/completions', {'model': MODEL_ID,
-        'messages': [{'role': 'user', 'content':
-            'Write a short, non-graphic fictional horror opening, about 70 words, '
-            'in the narration field. Set ready to true.'}],
-        'response_format': {'type': 'json_schema', 'json_schema': {'schema': {
-            'type': 'object', 'properties': {'ready': {'type': 'boolean'},
-                'narration': {'type': 'string'}},
-            'required': ['ready', 'narration'], 'additionalProperties': False}}},
-        'max_completion_tokens': 256, 'temperature': .7})
-    content = json.loads(result['choices'][0]['message']['content'])
-    if content['ready'] is not True or len(content['narration'].split()) < 30:
-        raise StoryGenerationError('Qwen readiness output did not contain a usable narration')
-    return {'check': 'Qwen script generation readiness', 'passed': True, 'model': MODEL_ID}
+    def ask(prompt, limit, schema):
+        result = request_story('chat/completions', {'model': MODEL_ID,
+            'messages': [{'role': 'user', 'content': prompt}],
+            'response_format': {'type': 'json_schema', 'json_schema': {'schema': schema}},
+            'max_completion_tokens': 512, 'temperature': .7})
+        return json.loads(result['choices'][0]['message']['content'])
+    parts = narration_batch('Write chapter_01 as an original non-graphic fictional horror opening. '
+        'An adult woman finds wet footprints leading into her locked basement. '
+        'Write about 110 words, building suspense through concrete action and sensory details.',
+        ['chapter_01'], 110, ask)
+    return {'check': 'Qwen script generation readiness', 'passed': True, 'model': MODEL_ID,
+            'narration_words': len(parts[0].split())}
 
 
 if __name__ == '__main__':

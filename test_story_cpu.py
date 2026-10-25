@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from pathlib import Path
 import tempfile
 import types
@@ -138,3 +139,21 @@ class QwenTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, 'measured chapter word targets'):
                     w.narration_batch('Write the assigned event.', ['chapter_01'], 110, ask)
                 self.assertEqual(ask.call_count, 3)
+
+    def test_decoder_pattern_enforces_word_boundaries_and_complete_ending(self):
+        schema = w.narration_schema(['chapter_01'], 110)
+        pattern = schema['properties']['narrations']['properties']['chapter_01']['pattern']
+        for words in (99, 100, 110, 130, 131):
+            text = 'Maya ' * (words - 1) + 'waited.'
+            self.assertEqual(bool(re.fullmatch(pattern, text)), 100 <= words <= 130)
+        self.assertIsNone(re.fullmatch(pattern, 'Maya ' * 109 + 'waited'))
+        self.assertIsNone(re.fullmatch(pattern, 'Maya ' * 109 + 'waited. '))
+
+    def test_readiness_exercises_the_actual_word_constrained_schema(self):
+        import story_check
+        words = 'Maya ' * 109 + 'waited.'
+        result = {'choices': [{'message': {'content': json.dumps({'narrations': {'chapter_01': words}})}}]}
+        with patch('story_check.request_story', return_value=result) as generate:
+            self.assertEqual(story_check.check()['narration_words'], 110)
+        self.assertIn('pattern', generate.call_args.args[1]['response_format']['json_schema']['schema']
+                      ['properties']['narrations']['properties']['chapter_01'])
