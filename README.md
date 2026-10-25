@@ -150,3 +150,10 @@ check, then launch **Daily horror story publishing** on `main` with `cleanup_run
 empty. Launch a new run; rerunning an old failed run uses its old commit.
 The previous hosted text client, authorization workflow and hosted audio
 backends have been removed. The old text API secret is unused and unnecessary.
+
+Qwen narration batches are checked using actual word counts, not the model's
+claim about length. At the default 110-word target, each chapter must contain
+100–130 words before audio generation. Short/long batches receive their measured
+counts and prior draft for a bounded rewrite, with at most three attempts.
+Persistent length failure stops before producing video assets. Measured audio
+still controls the final 15–20 minute acceptance check.
