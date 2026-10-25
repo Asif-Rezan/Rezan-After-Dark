@@ -3,3 +3,4 @@ Generate the script locally with Qwen/Qwen3-4B-Instruct-2507; no hosted text API
 Measure and enforce chapter word targets before generating narration audio.
 Enforce the narration word range directly in the local Qwen decoding grammar.
 Use decoder word bounds for measured audio-duration corrections as well.
+Verify real Kokoro narration with the pinned tokenizer stack before the full Qwen story.

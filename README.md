@@ -139,7 +139,13 @@ and runtime failures stop with privacy-safe errors. Generated scripts and raw
 runtime error messages are not placed in public logs.
 
 The daily job installs the small text runtime and runs `story_check.py` before
-installing video dependencies. **Qwen CPU script generation check** exercises
+installing video dependencies. After installation, `voice_check.py` generates
+two real Kokoro audio samples through the production pitch filter, checking
+sample rate, duration, finite samples, and non-silence before the full story.
+The narration tokenizer and CLI dependencies are pinned in `requirements-cpu.txt`;
+**Kokoro CPU narration check** runs the same live audio test on dependency changes.
+Update those pins together only after this Linux/Python 3.12 check passes.
+**Qwen CPU script generation check** exercises
 that same runtime without secrets. **Free strict story generation check**
 generates and validates a complete twenty-chapter story using private recent
 history, then saves it privately to Drive. Google OAuth checks now test only
