@@ -59,7 +59,7 @@ def shot_plan(story, lengths, word_lists):
 def storyboard(root=ROOT, ask=None, pause=None):
     """Create concrete visual prompts AFTER narration timing, never from outline beats."""
     import time
-    ask = ask or w.request_groq
+    ask = ask or w.request_story
     pause = pause or time.sleep
     story = json.loads((root/'story.json').read_text())
     plan = json.loads((root/'plan.json').read_text())
@@ -71,8 +71,6 @@ def storyboard(root=ROOT, ask=None, pause=None):
         return plan
     shots = plan['shots']
     for begin in range(0, len(shots), 8):
-        if begin:
-            pause(60)
         batch = shots[begin:begin+8]
         properties = {f"shot_{shot['index']:03}": {'type': 'string'} for shot in batch}
         schema = {'type': 'object', 'properties': properties,
@@ -91,10 +89,10 @@ Topic: {story.get('category', '')}. Story seeds: {json.dumps(story.get('story_se
 Chapter context: {json.dumps(context)}
 Exact shot windows: {json.dumps([{'key': f"shot_{shot['index']:03}", 'spoken': shot['narration']} for shot in batch])}
 """
-        result = ask('chat/completions', {'model': os.getenv('STORY_MODEL', 'openai/gpt-oss-120b'),
+        result = ask('chat/completions', {'model': os.getenv('STORY_MODEL', 'Qwen/Qwen3-4B-Instruct-2507'),
             'messages': [{'role': 'user', 'content': prompt}],
             'response_format': {'type': 'json_schema', 'json_schema': {'name': 'aligned_shots',
-                'strict': True, 'schema': schema}}, 'reasoning_effort': 'low',
+                'strict': True, 'schema': schema}},
             'temperature': .2, 'max_completion_tokens': 1800})
         choice = result['choices'][0]
         if choice.get('finish_reason') == 'length':
@@ -235,7 +233,7 @@ def correct_duration(story, root):
             direction = 'shorten' if total > dc.MAX_SECONDS else 'expand'
             selected, ratio = dc.select_revisions(lengths, direction)
             print(json.dumps({'correction_attempt': f'{attempt}/{dc.MAX_ATTEMPTS}',
-                              'method': f'Groq story {direction}', 'chapters': [i+1 for i in selected],
+                              'method': f'Qwen story {direction}', 'chapters': [i+1 for i in selected],
                               'target_word_ratio': round(ratio, 3)}), flush=True)
             candidate = w.revise_story_duration(story, ratio, direction, selected)
             for index in selected:

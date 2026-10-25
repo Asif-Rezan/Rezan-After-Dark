@@ -81,7 +81,7 @@ class DurationDecisionTests(unittest.TestCase):
                 self.assertEqual(make_audio.call_count, 20 + len(selected))
                 self.assertTrue(fixed['scenes'][-1]['narration'].endswith(CTA))
 
-    def test_three_attempt_limit_and_groq_failure_preserve_original(self):
+    def test_three_attempt_limit_and_qwen_failure_preserve_original(self):
         original = story_fixture()
         with tempfile.TemporaryDirectory() as temp, \
              patch('long_video.ensure_chapter_audio', return_value=65), \
@@ -91,8 +91,8 @@ class DurationDecisionTests(unittest.TestCase):
             self.assertEqual(revise.call_count, 3)
         with tempfile.TemporaryDirectory() as temp, \
              patch('long_video.ensure_chapter_audio', return_value=65), \
-             patch('workflow.revise_story_duration', side_effect=RuntimeError('Groq unavailable')):
-            with self.assertRaisesRegex(RuntimeError, 'Groq unavailable'):
+             patch('workflow.revise_story_duration', side_effect=RuntimeError('Qwen unavailable')):
+            with self.assertRaisesRegex(RuntimeError, 'Qwen unavailable'):
                 lv.correct_duration(original, Path(temp))
             self.assertTrue(original['scenes'][-1]['narration'].endswith(CTA))
 
@@ -195,7 +195,7 @@ class StoryRevisionTests(unittest.TestCase):
             keys = payload['response_format']['json_schema']['schema']['required']
             values = {key: ' '.join(['Maya']*65) for key in keys}
             return {'choices': [{'message': {'content': json.dumps(values)}}]}
-        with patch('workflow.request_groq', side_effect=response), patch('workflow.time.sleep'):
+        with patch('workflow.request_story', side_effect=response), patch('workflow.time.sleep'):
             revised = w.revise_story_duration(story, .78, 'shorten', [3, 4])
         self.assertTrue(revised['scenes'][-1]['narration'].endswith(CTA))
         self.assertEqual(revised['scenes'][2], story['scenes'][2])
@@ -203,10 +203,10 @@ class StoryRevisionTests(unittest.TestCase):
         self.assertIn('chapter5', prompts[0])
         self.assertEqual(len(revised['scenes']), 20)
 
-    def test_failed_groq_revision_does_not_mutate_story(self):
+    def test_failed_qwen_revision_does_not_mutate_story(self):
         story = story_fixture()
         before = json.dumps(story)
-        with patch('workflow.request_groq', side_effect=RuntimeError('rate limited')):
+        with patch('workflow.request_story', side_effect=RuntimeError('rate limited')):
             with self.assertRaisesRegex(RuntimeError, 'rate limited'):
                 w.revise_story_duration(story, .8, 'shorten', [3])
         self.assertEqual(json.dumps(story), before)

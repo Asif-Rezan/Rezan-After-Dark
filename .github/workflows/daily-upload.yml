@@ -36,14 +36,14 @@ env:
   MKL_NUM_THREADS: '4'
   DAILY_ENABLED: 'true'
   GENERATE_FRESH_STORY: 'true'
-  STORY_MODEL: openai/gpt-oss-120b
+  STORY_MODEL: Qwen/Qwen3-4B-Instruct-2507
   STORY_CHAPTER_WORD_TARGET: '110'
   CPU_IMAGE_MODEL: segmind/SSD-1B
 jobs:
   prepare:
     if: ${{ !inputs.cleanup_run }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -51,12 +51,10 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.12'
-      - name: Check Groq structured generation before CPU setup
-        env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: |
-          pip install 'requests>=2.32,<3' 'jsonschema>=4.23,<5'
-          python -u groq_check.py
+      - name: Install local Qwen CPU runtime
+        run: pip install -r requirements.txt -r requirements-story.txt
+      - name: Verify local Qwen script generation before video setup
+        run: python -u story_check.py
       - name: Install free narration and timing dependencies
         run: |
           sudo apt-get update
@@ -68,7 +66,6 @@ jobs:
         run: python -m unittest -v
       - name: Verify private upload readiness before generation
         env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
           YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
@@ -77,7 +74,6 @@ jobs:
         run: python oauth_check.py
       - name: Generate fresh horror story and exact narration storyboard
         env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
         run: |

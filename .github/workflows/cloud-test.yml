@@ -28,7 +28,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg fonts-dejavu-core espeak-ng
-          pip install -r requirements.txt
+          pip install -r requirements.txt -r requirements-story.txt
           pip install 'torch>=2.6,<3' --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements-cpu.txt
           npm install --ignore-scripts --no-audit --no-fund @magenta/music@1.23.1
@@ -37,7 +37,6 @@ jobs:
       - name: Live render or private upload
         if: inputs.mode != 'checks'
         env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           IMAGE_BACKEND: cpu
           TTS_BACKEND: kokoro
           CAPTION_BACKEND: cpu

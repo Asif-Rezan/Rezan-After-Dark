@@ -29,7 +29,7 @@ env:
   MKL_NUM_THREADS: '4'
   DAILY_ENABLED: 'false'
   GENERATE_FRESH_STORY: 'true'
-  STORY_MODEL: openai/gpt-oss-120b
+  STORY_MODEL: Qwen/Qwen3-4B-Instruct-2507
   CPU_IMAGE_MODEL: segmind/SSD-1B
 jobs:
   prepare:

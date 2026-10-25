@@ -65,10 +65,9 @@ def validate_story(data):
     return data
 
 
-def request_groq(endpoint, payload, binary=False):
-    """Use Groq only, preserving schema validation during bounded recovery."""
-    from groq_client import request_json
-    return request_json(endpoint, payload, required('GROQ_API_KEY'), binary)
+def request_story(endpoint, payload):
+    from story_cpu import request_story as generate
+    return generate(endpoint, payload)
 
 
 def story_outline_schema():
@@ -89,7 +88,7 @@ def make_story(day, previous):
     if os.getenv('STORY_FILE'):
         # Explicit original test story only; daily jobs must generate fresh stories.
         return validate_story(json.loads(Path(os.environ['STORY_FILE']).read_text()))
-    model = os.getenv('STORY_MODEL', 'openai/gpt-oss-120b')
+    model = os.getenv('STORY_MODEL', 'Qwen/Qwen3-4B-Instruct-2507')
     chapter_keys = [f'chapter_{i:02}' for i in range(1, 21)]
     text_schema = {'type': 'string'}
     def object_schema(properties):
@@ -97,10 +96,10 @@ def make_story(day, previous):
                 'required': list(properties), 'additionalProperties': False}
     outline_schema = story_outline_schema()
     def ask(prompt, limit, schema):
-        result = request_groq('chat/completions', {'model': model,
+        result = request_story('chat/completions', {'model': model,
             'messages': [{'role': 'user', 'content': prompt}],
             'response_format': {'type': 'json_schema', 'json_schema': {'name': 'story_payload',
-                'strict': True, 'schema': schema}}, 'reasoning_effort': 'low',
+                'strict': True, 'schema': schema}},
             'temperature': 0.8, 'max_completion_tokens': limit})
         choice = result['choices'][0]
         if choice.get('finish_reason') == 'length':
@@ -115,9 +114,12 @@ def make_story(day, previous):
         "Invent new adult characters, a specific setting, consistent supernatural rules and a satisfying final twist. "
         "Use atmosphere, suspense and unsettling discoveries, without graphic gore or sexual violence. "
         "Never present fiction as true events or copy existing stories, franchises or real people.")
+    recent_context = [{'title': str(item.get('title', ''))[:100],
+                       'plot': str(item.get('plot', ''))[:400]}
+                      for item in previous[-10:] if isinstance(item, dict)]
     outline = ask(f'''Plan an original English horror story for Rezan After Dark for {day}.
     Story direction: {theme}
-    Avoid these recent titles and outlines: {json.dumps(previous)}.
+    Avoid these recent titles and outlines: {json.dumps(recent_context)}.
     Open in immediate danger or with a disturbing discovery. Escalate through clues,
     failed explanations, a consequential choice, a confrontation and an earned chilling twist.
     Every chapter advances the plot. Maintain character appearance, location and timeline continuity.
@@ -141,8 +143,6 @@ def make_story(day, previous):
         raise ValueError('STORY_CHAPTER_WORD_TARGET must be between 95 and 125')
     prior = ''
     for begin in (0, 5, 10, 15):
-        # Separate bursts fit the free plan; never switch to a paid provider.
-        time.sleep(60)
         keys = chapter_keys[begin:begin+5]
         group_schema = object_schema({'narrations': object_schema({k: text_schema for k in keys})})
         group = ask(f'''Write chapters {begin+1} through {begin+5} of this original fictional horror story.
@@ -216,10 +216,8 @@ def revise_story_duration(story, ratio, direction, indices=None):
     if not indices or any(i not in range(20) for i in indices):
         raise ValueError('Invalid chapter selection for duration revision')
     schema_text = {'type': 'string'}
-    model = os.getenv('STORY_MODEL', 'openai/gpt-oss-120b')
+    model = os.getenv('STORY_MODEL', 'Qwen/Qwen3-4B-Instruct-2507')
     for batch_number, begin in enumerate(range(0, len(indices), 5)):
-        if batch_number:
-            time.sleep(60)  # Keep the existing free-tier pacing between Groq batches.
         selected = indices[begin:begin+5]
         batch = [keys[i] for i in selected]
         properties = {key: schema_text for key in batch}
@@ -238,11 +236,11 @@ Chapter text: {json.dumps({keys[i]: original[i] for i in selected})}
 Approximate spoken-word targets: {json.dumps(targets)}.
 Return JSON with exactly these chapter keys, each a complete revised narration string.
 Chapter 1 retains the frightening hook. Chapter 20 retains the chilling final twist.'''
-        result = request_groq('chat/completions', {'model': model,
+        result = request_story('chat/completions', {'model': model,
             'messages': [{'role': 'user', 'content': prompt}],
             'response_format': {'type': 'json_schema', 'json_schema': {
                 'name': 'duration_revision', 'strict': True, 'schema': schema}},
-            'reasoning_effort': 'low', 'temperature': .35, 'max_completion_tokens': 4400})
+            'temperature': .35, 'max_completion_tokens': 4400})
         choice = result['choices'][0]
         if choice.get('finish_reason') == 'length':
             raise RuntimeError('Duration revision was truncated')
@@ -293,41 +291,17 @@ def speech_chunks(text, limit=200):
 
 
 def make_narration(text, path):
-    if os.getenv('TTS_BACKEND', 'kokoro') == 'kokoro':
-        from voice_cpu import generate
-        generate(text, path)
-        return
-    parts = []
-    for index, chunk in enumerate(speech_chunks(text)):
-        part = path.with_name(path.stem + f'-part-{index:03}.wav')
-        if not part.exists():
-            part.write_bytes(request_groq('audio/speech', {
-                'model': os.getenv('TTS_MODEL') or 'canopylabs/orpheus-v1-english',
-                'voice': os.getenv('TTS_VOICE') or 'troy', 'input': chunk, 'response_format': 'wav'}, True))
-        parts.append(part)
-    playlist = path.with_suffix('.txt')
-    playlist.write_text(''.join(f"file '{p.name}'\n" for p in parts))
-    shell('ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', str(playlist), '-ar', '48000',
-          '-ac', '2', '-c:a', 'pcm_s16le', str(path))
+    if os.getenv('TTS_BACKEND', 'kokoro') != 'kokoro':
+        raise RuntimeError('TTS_BACKEND must be kokoro; hosted narration is disabled')
+    from voice_cpu import generate
+    generate(text, path)
 
 
 def transcribe(audio):
-    if os.getenv('CAPTION_BACKEND', 'cpu') == 'cpu':
-        from voice_cpu import transcribe_audio
-        return transcribe_audio(audio)
-    import requests
-    with audio.open('rb') as stream:
-        response = requests.post('https://api.groq.com/openai/v1/audio/transcriptions',
-            headers={'Authorization': 'Bearer ' + required('GROQ_API_KEY')},
-            files={'file': (audio.name, stream, 'audio/wav')},
-            data={'model': 'whisper-large-v3', 'response_format': 'verbose_json',
-                  'timestamp_granularities[]': 'word', 'language': 'en'}, timeout=180)
-    if not response.ok:
-        raise RuntimeError(f'Transcription failed with HTTP {response.status_code}')
-    words = response.json().get('words')
-    if not words:
-        raise RuntimeError('Transcription did not return word timings')
-    return words
+    if os.getenv('CAPTION_BACKEND', 'cpu') != 'cpu':
+        raise RuntimeError('CAPTION_BACKEND must be cpu; hosted transcription is disabled')
+    from voice_cpu import transcribe_audio
+    return transcribe_audio(audio)
 
 
 def aligned_subtitles(word_lists, lengths, path):
@@ -654,8 +628,10 @@ def upload_private(video, thumbnail, story, state, store, key, music_credit=''):
 
 def preflight():
     needed = ['DRIVE_TOKEN_JSON']
-    if not os.getenv('STORY_FILE') or os.getenv('TTS_BACKEND', 'kokoro') == 'groq' or os.getenv('CAPTION_BACKEND', 'cpu') == 'groq':
-        needed.append('GROQ_API_KEY')
+    if not os.getenv('STORY_FILE'):
+        import importlib.util
+        if importlib.util.find_spec('llama_cpp') is None:
+            needed.append('llama_cpp (install requirements-story.txt)')
     if os.getenv('IMAGE_BACKEND', 'cpu') == 'hf':
         needed += ['HF_TOKEN', 'IMAGE_MODEL']
     else:

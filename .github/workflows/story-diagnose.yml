@@ -1,4 +1,4 @@
-name: Free strict story generation check # reliable final narrator CTA
+name: Free strict story generation check # local Qwen CPU, no text API key
 on:
   workflow_dispatch:
   push:
@@ -7,26 +7,28 @@ permissions:
   contents: read
 jobs:
   generate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 12
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.12'
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt -r requirements-story.txt
       - name: Generate and save original story privately for editorial review
         env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OMP_NUM_THREADS: '4'
           DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
-          STORY_MODEL: openai/gpt-oss-120b
+          STORY_MODEL: Qwen/Qwen3-4B-Instruct-2507
         run: |
           python - <<'PY'
           import datetime, json
           import workflow as w
           from long_video import validate_engagement
-          story = w.make_story(datetime.date.today().isoformat(), [])
+          from zoneinfo import ZoneInfo
+          day = datetime.datetime.now(ZoneInfo('Asia/Dhaka')).date().isoformat()
+          story = w.make_story(day, w.Store().load('history.json', [])[-30:])
           validate_engagement(story)
           w.Store().save('inputs/improved-reviewed-story.json', story)
           print(json.dumps({'strict_story_passed': True, 'title': story['title'], 'words': sum(len(s['narration'].split()) for s in story['scenes']), 'chapters': len(story['scenes'])}))

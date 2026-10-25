@@ -11,8 +11,8 @@ services:
         value: "false"
       - key: UPLOAD_ENABLED
         value: "false"
-      - key: GROQ_API_KEY
-        sync: false
+      - key: STORY_MODEL
+        value: Qwen/Qwen3-4B-Instruct-2507
       - key: HF_TOKEN
         sync: false
       - key: IMAGE_MODEL

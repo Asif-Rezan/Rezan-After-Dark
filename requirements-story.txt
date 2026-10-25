@@ -1,0 +1,4 @@
+# Official CPU wheels avoid compiling llama.cpp on every GitHub runner.
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+--only-binary=llama-cpp-python
+llama-cpp-python==0.3.36

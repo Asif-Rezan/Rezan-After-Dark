@@ -94,8 +94,6 @@ try:
 except Exception as error:
     report_error('Drive OAuth', error)
 
-groq_configured = bool(os.getenv('GROQ_API_KEY'))
-print(json.dumps({'check': 'Groq secret presence', 'configured': groq_configured}))
-if not groq_configured:
-    failed = True
+print(json.dumps({'check': 'Script generation backend', 'model': 'Qwen/Qwen3-4B-Instruct-2507',
+                  'runtime': 'local CPU', 'api_key_required': False}))
 raise SystemExit(1 if failed else 0)

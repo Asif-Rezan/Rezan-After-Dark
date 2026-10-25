@@ -279,7 +279,7 @@ class Checks(unittest.TestCase):
 
     def test_missing_credentials(self):
         with patch.dict('os.environ', {}, clear=True):
-            with self.assertRaisesRegex(RuntimeError, 'GROQ_API_KEY'):
+            with self.assertRaisesRegex(RuntimeError, 'DRIVE_TOKEN_JSON'):
                 w.preflight()
 
     def test_free_drive_quota_guard(self):

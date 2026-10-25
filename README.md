@@ -4,7 +4,12 @@ Adapted from `Asif-Rezan/youtube-dark-psychology-automation` at commit `4556280d
 
 Creates one original English fictional horror video daily for **Rezan After Dark** (`UCwNhdtzL9XZMIAMXm81UCbw`), with private uploads at **06:00 Asia/Dhaka**. The reference workflow is preserved: twenty chapters, 15–20 minute measured narration, twenty CPU image workers, a new image every ten seconds, Kokoro voice, captions, original music, readable thumbnails, upload verification and recoverable private Drive checkpoints.
 
-Groq is the only text API provider. Temporary failures retry Groq with bounded backoff. Recognized structured-generation failures retry strict output once, then recover using Groq JSON mode with local validation against the identical schema. Persistent failures stop without switching providers. No Gemini API, key or fallback is used. Image generation, narration, captions and music retain the reference's CPU backends.
+Script generation uses **Qwen/Qwen3-4B-Instruct-2507** from Hugging Face on the
+runner's CPU. The pinned Unsloth Q4_K_M GGUF conversion of that base model is
+about 2.5 GB and is verified against its SHA-256 before loading. Story outlines,
+narration, duration revisions and shot prompts all use this same local model.
+No text-generation API key, hosted text provider, or provider fallback is used.
+Narration, captions, images and music keep their existing CPU backends.
 
 ## Horror stories and visuals
 
@@ -16,7 +21,6 @@ Illustrations follow the actual narration windows, with recurring character desc
 
 Use a **dedicated, previously unused Google Cloud project and Desktop OAuth client** for this repository. The approved project is `project-e02d8c94-35af-4ce3-ac5` (Rezan After Dark), project number `376050043753`, organization `919363005250`, owned by `asifrezan.office@gmail.com`. Enable YouTube Data API v3 and Google Drive API. Complete Google consent using `asifrezanit@gmail.com` for the Rezan After Dark channel and a separate, owner-only Drive folder in `asifrezanit@gmail.com`. Set these GitHub Actions secrets in **this repository only**:
 
-- `GROQ_API_KEY`: the new project's key. Never commit it.
 - `YOUTUBE_TOKEN_JSON`: OAuth authorized-user JSON for the Rezan After Dark channel. Required scopes: `youtube.upload` and `youtube.force-ssl`.
 - `DRIVE_TOKEN_JSON`: OAuth authorized-user JSON with Drive file access for the new app.
 - `DRIVE_FOLDER_ID`: ID of the dedicated Rezan After Dark folder created by `setup_drive_folder.py` with the new Drive OAuth token. This is mandatory. The folder carries a channel-specific marker; the code rejects the source project's folder.
@@ -42,15 +46,15 @@ not word count, controls acceptance: 900–1200 seconds is required, with 1020�
 seconds preferred.
 
 Preparation measures every chapter before making images. A slight overrun uses
-at most a 4% FFmpeg tempo correction. Larger overruns use Groq to shorten
-selected chapters; underruns use Groq to add relevant suspense, sensory details and character actions.
+at most a 4% FFmpeg tempo correction. Larger overruns use Qwen to shorten
+selected chapters; underruns use Qwen to add relevant suspense, sensory details and character actions.
 At most three correction attempts run. Changed chapters alone are resynthesized,
 then word timestamps, captions, and every ten-second visual window are rebuilt.
 Audio and transcript caches are tied to content hashes so changed text cannot
 reuse stale timing. The corrected story, narration, captions, storyboard source
 hash, and validated duration are checkpointed together before the twenty image
 workers start. Recovery failure stops before rendering or upload. The prepare job
-has a 90-minute limit to accommodate bounded Groq and CPU narration retries.
+has a 150-minute limit to accommodate bounded Qwen and CPU narration retries.
 
 ## Recovering a Drive cleanup timeout
 
@@ -109,51 +113,40 @@ Original MusicRNN notes are voiced as sparse A-minor chimes over slowly shifting
 
 Narration uses Kokoro `am_michael` at speed `0.82`, with a gentle two-semitone pitch reduction. Pitch processing preserves duration; changed voice settings invalidate cached audio and captions. Measured narration must be 15–20 minutes, targeting 18 minutes, with images changing every 10 seconds (the final image may be shorter).
 
-## Groq generation readiness and recovery
+## Local Qwen script generation
 
-The daily job runs `groq_check.py` before installing CPU dependencies. It exercises
-`STORY_MODEL` with the same twenty-chapter JSON schema and token budget as the
-real outline request, using placeholder content. **Groq authorization check** also
-runs this check when its client/request code changes and can be dispatched manually.
-No generated content or credentials are printed.
+`story_cpu.py` pins the base model identity to `Qwen/Qwen3-4B-Instruct-2507`.
+Its CPU artifact is
+[`unsloth/Qwen3-4B-Instruct-2507-GGUF`](https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF),
+file `Qwen3-4B-Instruct-2507-Q4_K_M.gguf`, revision
+`a06e946bb6b655725eafa393f4a9745d460374c9`, SHA-256
+`3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597`.
+This is a compressed conversion of the requested model, not a different fine-tune.
 
-Groq requests have a five-attempt total budget. Rate limits, transport failures,
-and temporary server failures back off and respect a bounded Retry-After.
-Recognized JSON generation failures retry, with JSON-mode recovery on the same
-model after repeated strict failures. Unsupported structured formats can recover
-immediately through JSON mode. Every recovered response must pass the original
-JSON schema locally; incomplete, invalid, or wrong-schema output is never accepted.
-Authentication, model-access, context-limit and unknown request errors stop
-immediately with a privacy-safe category, HTTP status, known provider code,
-allowlisted parameter and request ID when available. Raw error messages and
-`failed_generation` can contain unpublished content, so they are not logged.
-Unknown messages receive a correlation fingerprint instead.
+Install `pip install -r requirements.txt -r requirements-story.txt` for text
+inference. The latter installs the pinned llama.cpp Python CPU wheel from the
+maintainer's official wheel index. Public model downloads explicitly use no
+Hugging Face token. No external text API is contacted. The model is reused for
+all requests within a process and runs with a 16,384-token context and at most
+four CPU threads by default. Recent-story context is capped to keep prompts
+within that budget. The model download is about 2.5 GB on the first use per
+runner, and CPU inference takes longer than a hosted API.
 
-If readiness fails, inspect that step before rerunning the full pipeline:
-`authentication_failed` needs a valid repository Groq secret; `access_denied` or
-`model_unavailable` needs provider/model access repaired; `context_limit` or
-`token_budget_rejected` needs the request budget reviewed. Do not repeatedly
-rerun an unchanged permanent error. A healthy readiness check is necessary but
-full generation still depends on provider capacity and the actual story request.
-Daily runners are pinned to Ubuntu 24.04 and checkout/setup-python use Node 24
-releases to avoid implicit runner/runtime migrations.
+JSON generation uses llama.cpp's schema grammar and then validates locally
+against the original schema. At most three attempts are allowed for incomplete
+or invalid JSON; download/checksum retries are also bounded. Context overflow
+and runtime failures stop with privacy-safe errors. Generated scripts and raw
+runtime error messages are not placed in public logs.
 
-### Organization restriction detected on October 25, 2026
+The daily job installs the small text runtime and runs `story_check.py` before
+installing video dependencies. **Qwen CPU script generation check** exercises
+that same runtime without secrets. **Free strict story generation check**
+generates and validates a complete twenty-chapter story using private recent
+history, then saves it privately to Drive. Google OAuth checks now test only
+Google access and do not require a text API credential.
 
-The live readiness check returned HTTP 400 with Groq code
-`organization_restricted` for the GitHub repository secret. This is a provider
-organization access restriction, not a JSON schema or runner error. The check
-now produces a GitHub error annotation and job summary with recovery guidance.
-The signed-in Groq console account could answer a playground readiness request;
-that does not prove that GitHub's stored key belongs to that same organization.
-Restore the restricted organization's access through Groq support. If the
-repository secret is from a different, stale organization, the account owner
-must replace `GROQ_API_KEY` with a key from the intended authorized account.
-Generating another key inside a restricted organization does not repair its
-access. Never post an API key in chat or commit it to Git.
-
-After repairing access, run **Groq authorization check**, then **Free strict story
-generation check**, then launch one **Daily horror story publishing** run on
-`main` (leave `cleanup_run` empty). Start a new run to use the fixed code; rerunning
-one of the October 22–25 failures uses its old commit. Keep the existing daily
-schedule enabled. No code change can guarantee availability of an external API.
+To verify a code change, run the Qwen readiness check, then the complete story
+check, then launch **Daily horror story publishing** on `main` with `cleanup_run`
+empty. Launch a new run; rerunning an old failed run uses its old commit.
+The previous hosted text client, authorization workflow and hosted audio
+backends have been removed. The old text API secret is unused and unnecessary.

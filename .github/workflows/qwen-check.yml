@@ -1,0 +1,26 @@
+name: Qwen CPU script generation check
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/qwen-check.yml', 'story_cpu.py', 'story_check.py', 'requirements-story.txt']
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  STORY_MODEL: Qwen/Qwen3-4B-Instruct-2507
+  OMP_NUM_THREADS: '4'
+  HF_HUB_DISABLE_XET: '1'
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt -r requirements-story.txt
+      - name: Generate and validate fresh Qwen narration without API credentials
+        run: python -u story_check.py
