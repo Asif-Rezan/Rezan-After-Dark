@@ -84,16 +84,40 @@ def story_outline_schema():
         'scenes': object_schema({k: scene_schema for k in chapter_keys})})
 
 
+def narration_batch(prompt, keys, target, ask):
+    """Measure actual words; smaller local models may ignore a length instruction."""
+    properties = {key: {'type': 'string'} for key in keys}
+    schema = {'type': 'object', 'properties': {'narrations': {
+        'type': 'object', 'properties': properties, 'required': keys, 'additionalProperties': False}},
+        'required': ['narrations'], 'additionalProperties': False}
+    lower, upper = max(85, target - 10), target + 20
+    feedback = ''
+    for attempt in range(3):
+        group = ask(prompt + feedback, 4200, schema)
+        values = group.get('narrations', {})
+        if set(values) != set(keys) or not all(isinstance(values[key], str) for key in keys):
+            raise ValueError('Narration batch must contain every assigned chapter as a string')
+        counts = {key: len(values[key].split()) for key in keys}
+        if all(lower <= count <= upper for count in counts.values()):
+            return [values[key] for key in keys]
+        print(json.dumps({'check': 'Qwen narration word targets', 'attempt': attempt + 1,
+            'passed': False, 'chapter_words': counts, 'minimum': lower, 'maximum': upper}), flush=True)
+        feedback = (f'\nThe draft failed measured word counts: {json.dumps(counts)}. '
+            f'Every chapter MUST have {lower}-{upper} spoken words, targeting {target}. '
+            'Expand short chapters with concrete action, sensory details, and the protagonist\'s reactions '
+            'within that chapter\'s assigned event. Use 8-10 complete sentences per chapter. '
+            'Shorten overlong chapters without losing the event. Return ALL assigned chapters, '
+            'with no headings, word-count labels, filler, or repeated paragraphs. '
+            'Previous draft to revise: ' + json.dumps(group))
+    raise RuntimeError('Qwen narration missed measured chapter word targets after three attempts')
+
+
 def make_story(day, previous):
     if os.getenv('STORY_FILE'):
         # Explicit original test story only; daily jobs must generate fresh stories.
         return validate_story(json.loads(Path(os.environ['STORY_FILE']).read_text()))
     model = os.getenv('STORY_MODEL', 'Qwen/Qwen3-4B-Instruct-2507')
     chapter_keys = [f'chapter_{i:02}' for i in range(1, 21)]
-    text_schema = {'type': 'string'}
-    def object_schema(properties):
-        return {'type': 'object', 'properties': properties,
-                'required': list(properties), 'additionalProperties': False}
     outline_schema = story_outline_schema()
     def ask(prompt, limit, schema):
         result = request_story('chat/completions', {'model': model,
@@ -143,14 +167,14 @@ def make_story(day, previous):
     prior = ''
     for begin in (0, 5, 10, 15):
         keys = chapter_keys[begin:begin+5]
-        group_schema = object_schema({'narrations': object_schema({k: text_schema for k in keys})})
-        group = ask(f'''Write chapters {begin+1} through {begin+5} of this original fictional horror story.
+        prompt = f'''Write chapters {begin+1} through {begin+5} of this original fictional horror story.
         Content direction: {theme}
         Title: {outline['title']}. Story seeds: {json.dumps(topic['facts'])}. Character appearance: {outline['character_description']}.
         Assigned chapter events ONLY: {json.dumps([{'chapter': i+1, 'event': summaries[i]} for i in range(begin, begin+5)])}.
         Previous chapter ending: {prior[-700:]}.
         Return JSON with narrations: an object with the exact chapter keys {keys}, each value a narration string.
         Each string MUST contain approximately {chapter_target} English spoken words (within 5 words).
+        Use 8-10 complete sentences per chapter, developing its action and sensory details fully.
         Across all twenty chapters, aim for 2,100–2,300 narrated words including the separately added final CTA.
         Natural immersive horror narration with sensory details, tension and believable adult characters.
         Use measured sentences and natural punctuation for slow, deliberate delivery; no spoken stage directions.
@@ -159,10 +183,8 @@ def make_story(day, previous):
         End with an earned chilling twist that pays off earlier clues. Do not include any viewer call to action in any chapter;
         the application adds a final like, comment, and subscribe request separately.
         Narrate ONLY the five assigned events, one event per chapter in the listed order. Do not jump ahead.\n        No ending, farewell, viewer question, or call to action before chapter 20.
-        Do not add chapter headings or directions to spoken text. No repeated introduction.''', 4200, group_schema)
-        parts = [group['narrations'][k] for k in keys]
-        if len(parts) != 5 or not all(isinstance(p, str) for p in parts):
-            raise ValueError('Narration batch must contain five strings')
+        Do not add chapter headings or directions to spoken text. No repeated introduction.'''
+        parts = narration_batch(prompt, keys, chapter_target, ask)
         for scene, narration in zip(outline['scenes'][begin:begin+5], parts):
             scene['narration'] = narration
         prior = parts[-1]

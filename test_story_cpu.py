@@ -119,3 +119,22 @@ class QwenTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'disabled'):
                 w.transcribe(Path('audio.wav'))
         post.assert_not_called()
+
+    def test_short_narration_is_revised_using_measured_word_feedback(self):
+        keys = ['chapter_01', 'chapter_02']
+        short = {'narrations': {key: 'word ' * 65 for key in keys}}
+        full = {'narrations': {key: 'word ' * 110 for key in keys}}
+        ask = Mock(side_effect=[short, full])
+        result = w.narration_batch('Write the assigned events.', keys, 110, ask)
+        self.assertEqual([len(text.split()) for text in result], [110, 110])
+        self.assertEqual(ask.call_count, 2)
+        self.assertIn('65', ask.call_args.args[0])
+        self.assertIn('100-130', ask.call_args.args[0])
+
+    def test_persistently_short_or_long_narration_stops_before_video_generation(self):
+        for count in (65, 180):
+            with self.subTest(count=count):
+                ask = Mock(return_value={'narrations': {'chapter_01': 'word ' * count}})
+                with self.assertRaisesRegex(RuntimeError, 'measured chapter word targets'):
+                    w.narration_batch('Write the assigned event.', ['chapter_01'], 110, ask)
+                self.assertEqual(ask.call_count, 3)
