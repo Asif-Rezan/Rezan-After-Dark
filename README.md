@@ -137,3 +137,23 @@ rerun an unchanged permanent error. A healthy readiness check is necessary but
 full generation still depends on provider capacity and the actual story request.
 Daily runners are pinned to Ubuntu 24.04 and checkout/setup-python use Node 24
 releases to avoid implicit runner/runtime migrations.
+
+### Organization restriction detected on October 25, 2026
+
+The live readiness check returned HTTP 400 with Groq code
+`organization_restricted` for the GitHub repository secret. This is a provider
+organization access restriction, not a JSON schema or runner error. The check
+now produces a GitHub error annotation and job summary with recovery guidance.
+The signed-in Groq console account could answer a playground readiness request;
+that does not prove that GitHub's stored key belongs to that same organization.
+Restore the restricted organization's access through Groq support. If the
+repository secret is from a different, stale organization, the account owner
+must replace `GROQ_API_KEY` with a key from the intended authorized account.
+Generating another key inside a restricted organization does not repair its
+access. Never post an API key in chat or commit it to Git.
+
+After repairing access, run **Groq authorization check**, then **Free strict story
+generation check**, then launch one **Daily horror story publishing** run on
+`main` (leave `cleanup_run` empty). Start a new run to use the fixed code; rerunning
+one of the October 22–25 failures uses its old commit. Keep the existing daily
+schedule enabled. No code change can guarantee availability of an external API.

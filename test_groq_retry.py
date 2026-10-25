@@ -1,4 +1,7 @@
+import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 import requests
 import workflow as w
@@ -79,7 +82,8 @@ class GroqOnlyTests(unittest.TestCase):
 
     def test_generic_bad_request_and_model_errors_are_not_retried(self):
         for response in (self.failure(None, 'Invalid request'),
-                         self.failure('model_decommissioned', 'Model decommissioned')):
+                         self.failure('model_decommissioned', 'Model decommissioned'),
+                         self.failure('organization_restricted', 'Organization has been restricted')):
             with self.subTest(response=response), patch('requests.post', return_value=response) as post, patch.object(w.time, 'sleep') as sleep:
                 with self.assertRaises(GroqError) as caught:
                     w.request_groq('chat/completions', self.structured_payload())
@@ -108,6 +112,16 @@ class GroqOnlyTests(unittest.TestCase):
             if node['type'] == 'array':
                 return [placeholder(node['items'])]
             return 'test'
-        with patch('requests.post', return_value=self.response(content=__import__('json').dumps(placeholder(schema)))) as post:
+        with patch('requests.post', return_value=self.response(content=json.dumps(placeholder(schema)))) as post:
             self.assertEqual(check()['chapters'], 20)
         self.assertEqual(post.call_args.kwargs['json']['response_format']['json_schema']['schema'], schema)
+
+    def test_restricted_organization_has_actionable_private_safe_summary(self):
+        from groq_check import report_failure
+        with tempfile.TemporaryDirectory() as temp:
+            summary = Path(temp)/'summary.md'
+            with patch.dict('os.environ', {'GITHUB_ACTIONS': 'true', 'GITHUB_STEP_SUMMARY': str(summary)}), patch('builtins.print') as output:
+                report_failure(GroqError(400, 'access_denied', code='organization_restricted'))
+            self.assertIn('Restore access with Groq support', summary.read_text())
+            self.assertIn('rotating a key', summary.read_text())
+            self.assertTrue(any('::error' in str(call) for call in output.call_args_list))
