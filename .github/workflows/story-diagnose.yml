@@ -2,7 +2,8 @@ name: Free strict story generation check # local Qwen CPU, no text API key
 on:
   workflow_dispatch:
   push:
-    paths: ['.github/workflows/story-diagnose.yml']
+    branches: [main]
+    paths: ['.github/workflows/story-diagnose.yml', 'workflow.py', 'story_cpu.py', 'requirements-story.txt']
 permissions:
   contents: read
 jobs:
