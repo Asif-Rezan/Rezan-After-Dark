@@ -4,7 +4,7 @@ on:
     branches: [main]
     paths: ['.github/workflows/private-video-trigger.txt']
   schedule:
-    - cron: '0 0 * * *' # 06:00 Asia/Dhaka
+    - cron: '0 18 * * *' # 00:00 Asia/Dhaka (following day)
   workflow_dispatch:
     inputs:
       cleanup_run:
