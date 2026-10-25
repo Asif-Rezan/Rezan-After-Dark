@@ -75,12 +75,12 @@ def story_outline_schema():
         return {'type': 'object', 'properties': properties,
             'required': list(properties), 'additionalProperties': False}
     text_schema = {'type': 'string'}
-    scene_schema = object_schema({'summary': text_schema, 'image_prompt': text_schema,
-        'image_prompts': {'type': 'array', 'items': text_schema}})
+    # Final shot prompts are generated from timed narration, so don't generate
+    # discarded four-image chapter variants or duplicate YouTube metadata here.
+    scene_schema = object_schema({'summary': text_schema, 'image_prompt': text_schema})
     chapter_keys = [f'chapter_{i:02}' for i in range(1, 21)]
     return object_schema({**{k: text_schema for k in
-        ('title', 'description', 'thumbnail_text', 'thumbnail_prompt', 'character_description', 'protagonist_name')},
-        'tags': {'type': 'array', 'items': text_schema},
+        ('title', 'character_description', 'protagonist_name')},
         'scenes': object_schema({k: scene_schema for k in chapter_keys})})
 
 
@@ -123,18 +123,17 @@ def make_story(day, previous):
     Open in immediate danger or with a disturbing discovery. Escalate through clues,
     failed explanations, a consequential choice, a confrontation and an earned chilling twist.
     Every chapter advances the plot. Maintain character appearance, location and timeline continuity.
-    Return JSON: title (max 100 characters), description, tags (list), thumbnail_text (2-5 words),
-    thumbnail_prompt, protagonist_name, character_description,
-    scenes (chapter_01 through chapter_20). Each chapter: summary (max 25 words), image_prompt,
-    image_prompts (four distinct visual beats). Atmospheric cinematic horror imagery, non-graphic.
-    Provide ONLY the plan, no full narration yet.''', 5200, outline_schema)
+    Return JSON: title (max 100 characters), protagonist_name, character_description (max 40 words),
+    scenes (chapter_01 through chapter_20). Each chapter: summary (15-25 words) and
+    one image_prompt (8-14 words). Atmospheric cinematic horror imagery, non-graphic.
+    Provide ONLY this concise plan, no narration or YouTube metadata yet.
+    Exact narration-matched visuals and publishing metadata are generated later.''', 3000, outline_schema)
     outline['scenes'] = [outline['scenes'][k] for k in chapter_keys]
     outline['format'] = 'horror-story'
     outline['topic_id'] = topic['id']
     outline['category'] = topic['category']
     outline['fictional'] = True
     outline['story_seeds'] = topic['facts']
-    outline['description'] += '\nAn original fictional horror story. Characters and events are fictional. AI-assisted narration and illustrations.'
     if len(outline.get('scenes', [])) != 20:
         raise ValueError('Outline requires exactly twenty chapters')
     summaries = [scene['summary'] for scene in outline['scenes']]
