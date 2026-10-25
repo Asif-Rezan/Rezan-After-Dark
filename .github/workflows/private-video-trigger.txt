@@ -2,3 +2,4 @@ Start a fresh private horror video with slow deep narration, 15–20 minute dura
 Generate the script locally with Qwen/Qwen3-4B-Instruct-2507; no hosted text API.
 Measure and enforce chapter word targets before generating narration audio.
 Enforce the narration word range directly in the local Qwen decoding grammar.
+Use decoder word bounds for measured audio-duration corrections as well.

@@ -193,6 +193,8 @@ class StoryRevisionTests(unittest.TestCase):
         def response(endpoint, payload):
             prompts.append(payload['messages'][0]['content'])
             keys = payload['response_format']['json_schema']['schema']['required']
+            for key in keys:
+                self.assertIn('pattern', payload['response_format']['json_schema']['schema']['properties'][key])
             values = {key: ' '.join(['Maya']*65) for key in keys}
             return {'choices': [{'message': {'content': json.dumps(values)}}]}
         with patch('workflow.request_story', side_effect=response), patch('workflow.time.sleep'):

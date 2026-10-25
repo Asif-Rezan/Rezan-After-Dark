@@ -158,3 +158,5 @@ ending. Actual word counts are checked independently afterward. At the default 1
 counts and prior draft for a bounded rewrite, with at most three attempts.
 Persistent length failure stops before producing video assets. Measured audio
 still controls the final 15–20 minute acceptance check.
+Duration revisions use the same word-pattern grammar with a narrow range around
+the controller's requested word target, before their independent validation.

@@ -84,13 +84,17 @@ def story_outline_schema():
         'scenes': object_schema({k: scene_schema for k in chapter_keys})})
 
 
-def narration_schema(keys, target):
+def narration_text_schema(lower, upper):
     """Constrain English words in the decoder, including final sentence punctuation."""
-    lower, upper = max(85, target - 10), target + 20
     word = r"[A-Za-z0-9][A-Za-z0-9,.;:!?'\-]*"
     final_word = r"[A-Za-z0-9][A-Za-z0-9'\-]*[.!?]"
     pattern = '^' + word + '( ' + word + '){' + str(lower - 2) + ',' + str(upper - 2) + '} ' + final_word + '$'
-    properties = {key: {'type': 'string', 'pattern': pattern} for key in keys}
+    return {'type': 'string', 'pattern': pattern}
+
+
+def narration_schema(keys, target):
+    lower, upper = max(85, target - 10), target + 20
+    properties = {key: narration_text_schema(lower, upper) for key in keys}
     schema = {'type': 'object', 'properties': {'narrations': {
         'type': 'object', 'properties': properties, 'required': keys, 'additionalProperties': False}},
         'required': ['narrations'], 'additionalProperties': False}
@@ -249,16 +253,17 @@ def revise_story_duration(story, ratio, direction, indices=None):
     indices = list(range(20)) if indices is None else sorted(set(indices))
     if not indices or any(i not in range(20) for i in indices):
         raise ValueError('Invalid chapter selection for duration revision')
-    schema_text = {'type': 'string'}
     model = os.getenv('STORY_MODEL', 'Qwen/Qwen3-4B-Instruct-2507')
     for batch_number, begin in enumerate(range(0, len(indices), 5)):
         selected = indices[begin:begin+5]
         batch = [keys[i] for i in selected]
-        properties = {key: schema_text for key in batch}
-        schema = {'type': 'object', 'properties': properties,
-                  'required': batch, 'additionalProperties': False}
         targets = {keys[i]: max(45, min(180, round(len(original[i].split()) * ratio)))
                    for i in selected}
+        properties = {key: narration_text_schema(
+            targets[key] - max(3, round(targets[key] * .05)),
+            targets[key] + max(3, round(targets[key] * .05))) for key in batch}
+        schema = {'type': 'object', 'properties': properties,
+                  'required': batch, 'additionalProperties': False}
         prompt = f'''Revise these chapters of an original fictional horror story to {direction} the
 spoken narration. Preserve character identities, supernatural rules, chronology, clues,
 chapter order and final twist. Add atmosphere or action without changing the plot.
@@ -269,6 +274,7 @@ Adjacent chapter context: {json.dumps({keys[i]: {'before': original[i-1][-350:] 
 Chapter text: {json.dumps({keys[i]: original[i] for i in selected})}
 Approximate spoken-word targets: {json.dumps(targets)}.
 Return JSON with exactly these chapter keys, each a complete revised narration string.
+Use ASCII punctuation, single spaces between words, indirect speech and no paragraph breaks.
 Chapter 1 retains the frightening hook. Chapter 20 retains the chilling final twist.'''
         result = request_story('chat/completions', {'model': model,
             'messages': [{'role': 'user', 'content': prompt}],
