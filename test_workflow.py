@@ -168,7 +168,7 @@ class Checks(unittest.TestCase):
         with self.assertRaises(ValueError):
             shot_plan(story, [7.2, 8.3], [[], []])
 
-    def test_storyboard_uses_spoken_window_and_refuses_missing_shots(self):
+    def test_storyboard_uses_spoken_window_and_keeps_completed_shots(self):
         from long_video import shot_plan, storyboard, generate_shard
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -195,8 +195,9 @@ class Checks(unittest.TestCase):
                 return {'choices': [{'message': {'content': '{}'}}]}
             aligned.pop('storyboard_verified')
             (root/'plan.json').write_text(json.dumps(aligned))
-            with self.assertRaisesRegex(ValueError, 'every narration window'):
-                storyboard(root, ask=incomplete, pause=lambda _: None)
+            resumed = storyboard(root, ask=incomplete, pause=lambda _: None)
+            self.assertTrue(resumed['storyboard_verified'])
+            self.assertEqual(resumed['shots'], aligned['shots'])
 
     def test_scene_refinement_uses_historical_action_without_reference(self):
         from long_video import refine_visual_plan

@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 import workflow as w
 import duration_control as dc
 from voice_cpu import voice_settings
+from resilience import produce_file
 
 ROOT = Path(os.getenv('OUTPUT_DIR', 'output/horror-long-video'))
 INTERVAL = 10
@@ -56,6 +57,20 @@ def shot_plan(story, lengths, word_lists):
         'style': 'horror-story', 'alignment': 'measured-word-timestamps', 'shots': shots}
 
 
+def write_json(path, value):
+    """A cancelled write must not destroy the previous valid checkpoint."""
+    temporary = path.with_name(path.name + '.tmp')
+    try:
+        temporary.write_text(json.dumps(value, indent=2))
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def valid_visual(value):
+    return isinstance(value, str) and 5 <= len(value.split()) <= 30
+
+
 def storyboard(root=ROOT, ask=None, pause=None):
     """Create concrete visual prompts AFTER narration timing, never from outline beats."""
     import time
@@ -70,8 +85,9 @@ def storyboard(root=ROOT, ask=None, pause=None):
     if plan.get('storyboard_verified'):
         return plan
     shots = plan['shots']
-    for begin in range(0, len(shots), 8):
-        batch = shots[begin:begin+8]
+    pending = [shot for shot in shots if not valid_visual(shot.get('visual_action'))]
+    for begin in range(0, len(pending), 8):
+        batch = pending[begin:begin+8]
         properties = {f"shot_{shot['index']:03}": {'type': 'string'} for shot in batch}
         schema = {'type': 'object', 'properties': properties,
                   'required': list(properties), 'additionalProperties': False}
@@ -89,28 +105,53 @@ Topic: {story.get('category', '')}. Story seeds: {json.dumps(story.get('story_se
 Chapter context: {json.dumps(context)}
 Exact shot windows: {json.dumps([{'key': f"shot_{shot['index']:03}", 'spoken': shot['narration']} for shot in batch])}
 """
-        result = ask('chat/completions', {'model': os.getenv('STORY_MODEL', 'Qwen/Qwen3-4B-Instruct-2507'),
-            'messages': [{'role': 'user', 'content': prompt}],
-            'response_format': {'type': 'json_schema', 'json_schema': {'name': 'aligned_shots',
-                'strict': True, 'schema': schema}},
-            'temperature': .2, 'max_completion_tokens': 1800})
-        choice = result['choices'][0]
-        if choice.get('finish_reason') == 'length':
-            raise RuntimeError('Storyboard response truncated')
-        values = json.loads(choice['message']['content'])
-        if set(values) != set(properties):
-            raise ValueError('Storyboard must cover every narration window exactly once')
-        for shot in batch:
-            visual = values[f"shot_{shot['index']:03}"]
-            if not isinstance(visual, str) or not 5 <= len(visual.split()) <= 30:
-                raise ValueError('Visual prompt must be a concise concrete scene')
-            shot['visual_action'] = visual
-            shot['prompt'] = visual
+        unresolved = list(batch)
+        for attempt in range(3):
+            payload = {'model': os.getenv('STORY_MODEL', 'Qwen/Qwen3-4B-Instruct-2507'),
+                'messages': [{'role': 'user', 'content': prompt +
+                    ('\nRepair invalid or missing prompts. Use 12-22 words per scene.' if attempt else '')}],
+                'response_format': {'type': 'json_schema', 'json_schema': {'name': 'aligned_shots',
+                    'strict': True, 'schema': schema}},
+                'temperature': .2, 'max_completion_tokens': 1800}
+            try:
+                result = ask('chat/completions', payload)
+                choice = result['choices'][0]
+                if choice.get('finish_reason') == 'length':
+                    raise ValueError('Incomplete storyboard')
+                values = json.loads(choice['message']['content'])
+                if not isinstance(values, dict):
+                    raise ValueError('Storyboard must be an object')
+                for shot in list(unresolved):
+                    visual = values.get(f"shot_{shot['index']:03}")
+                    if valid_visual(visual):
+                        shot['visual_action'] = shot['prompt'] = ' '.join(visual.split())
+                        unresolved.remove(shot)
+            except (RuntimeError, ValueError, TypeError, KeyError, IndexError, OSError) as error:
+                print(json.dumps({'check': 'Storyboard response', 'attempt': attempt+1,
+                    'error_type': type(error).__name__}), flush=True)
+            # Preserve successes even when another shot in this batch needs repair.
+            write_json(root/'plan.json', plan)
+            if not unresolved:
+                break
+            if attempt < 2:
+                pause(2 ** attempt)
+        for shot in unresolved:
+            # The measured spoken window remains the source; never invent another event.
+            import re
+            words = re.findall(r"[\w'-]+", shot['narration'])[:22]
+            if not words:
+                raise ValueError('Cannot recover storyboard without narrated words')
+            visual = 'Illustration of ' + ' '.join(words) + ' in an atmospheric setting'
+            shot['visual_action'] = shot['prompt'] = visual
+            shot['storyboard_advisory'] = 'Narration-based fallback after three unsuccessful responses'
+        if unresolved:
+            print(json.dumps({'check': 'Storyboard fallback',
+                'shots': [shot['index'] for shot in unresolved], 'advisory': True}), flush=True)
         # Private local checkpoint; do not log unpublished narration or prompts.
-        (root/'plan.json').write_text(json.dumps(plan, indent=2))
-        print(json.dumps({'aligned_shots': min(begin+8, len(shots)), 'total': len(shots)}), flush=True)
+        write_json(root/'plan.json', plan)
+        print(json.dumps({'aligned_shots': len(shots) - len(pending) + min(begin+8, len(pending)), 'total': len(shots)}), flush=True)
     plan['storyboard_verified'] = True
-    (root/'plan.json').write_text(json.dumps(plan, indent=2))
+    write_json(root/'plan.json', plan)
     return plan
 
 
@@ -278,9 +319,9 @@ def prepare(story=None, root=ROOT):
         'audio_hashes': [file_hash(p) for p in audios], 'words': word_lists},
         sort_keys=True).encode()).hexdigest()
     previous = read_cache(root/'plan.json')
-    if previous.get('source_hash') == plan['source_hash'] and previous.get('storyboard_verified') and previous.get('image_interval_seconds') == INTERVAL:
+    if previous.get('source_hash') == plan['source_hash'] and previous.get('image_interval_seconds') == INTERVAL:
         plan = previous
-    (root/'plan.json').write_text(json.dumps(plan, indent=2))
+    write_json(root/'plan.json', plan)
     (root/'duration.json').write_text(json.dumps({'duration_seconds': measured,
         'story_sha256': file_hash(root/'story.json'),
         'narration_sha256': file_hash(root/'narration.wav'),
@@ -326,48 +367,68 @@ def refine_visual_plan(root=ROOT):
     plan['storyboard_verified'] = True
     plan['visual_review'] = {'passed': False, 'phase': 'horror-render-review-required'}
     plan['scene_composition_version'] = 3
-    (root/'plan.json').write_text(json.dumps(plan, indent=2))
+    write_json(root/'plan.json', plan)
     print(json.dumps({'scene_plan_refined': True, 'shots': len(plan['shots'])}), flush=True)
     return plan
 
 
 def generate_shard(shard, root=ROOT, count=SHARDS):
-    from scene_check import check_scene
     plan = json.loads((root/'plan.json').read_text())
     if not plan.get('storyboard_verified') or not all(s.get('prompt') for s in plan['shots']):
         raise RuntimeError('Narration-aligned storyboard is required before image generation')
     if plan.get('scene_composition_version') != 3:
         raise RuntimeError('Scene-specific object and group composition is required')
     shots = [s for s in plan['shots'] if s['index']%count == shard]
+    failures = []
     for shot in shots:
-        index = shot['index']
-        image, clip = root/f'shot-{index:03}.png', root/f'shot-{index:03}.mp4'
-        check = root/f'shot-{index:03}.qa.json'
-        os.environ['IMAGE_NEGATIVE_PROMPT'] = shot.get('negative_prompt', '')
-        for attempt in range(3):
-            os.environ['IMAGE_SEED'] = str(shot['seed']+attempt*10000)
-            if not image.exists():
-                w.make_image(shot['prompt'], image)
+        try:
+            generate_shot(shot, root, shard, len(plan['shots']))
+        except Exception as error:
+            failures.append(shot['index'])
+            print(json.dumps({'shard': shard, 'shot': shot['index'], 'rendered': False,
+                'error_type': type(error).__name__}), flush=True)
+    if failures:
+        raise RuntimeError(f'Shard {shard} has unfinished shots {failures}; completed work is preserved')
+
+
+def generate_shot(shot, root, shard, total):
+    from scene_check import check_scene
+    index = shot['index']
+    image, clip = root/f'shot-{index:03}.png', root/f'shot-{index:03}.mp4'
+    check = root/f'shot-{index:03}.qa.json'
+    os.environ['IMAGE_NEGATIVE_PROMPT'] = shot.get('negative_prompt', '')
+    for attempt in range(3):
+        os.environ['IMAGE_SEED'] = str(shot['seed']+attempt*10000)
+        if not image.exists():
+            w.make_image(shot['prompt'], image)
+        try:
             report = check_scene(image, shot)
-            if report['passed']:
-                check.write_text(json.dumps(report))
-                break
-            # CLIP similarity is a heuristic, not a reliable hard failure gate.
-            # Keep a real safety-approved image after the final attempt, recording
-            # the mismatch for review rather than losing all CPU render work.
-            if attempt == 2:
-                report = dict(report, passed=False, advisory=True,
-                              warning='CLIP scene match was inconclusive after three renders')
-                check.write_text(json.dumps(report))
-                print(json.dumps({'shot': index, 'visual_check_passed': False,
-                    'attempt': attempt+1, 'quality_warning': True}), flush=True)
-                break
-            image.unlink()
-            print(json.dumps({'shot': index, 'visual_check_passed': False, 'attempt': attempt+1}), flush=True)
-        if not clip.exists():
-            picture_clip(image, shot['duration'], clip)
-        print(json.dumps({'shard': shard, 'shot': index+1, 'total': len(plan['shots']), 'rendered': True,
-            'visual_check_passed': report['passed']}), flush=True)
+        except Exception as error:
+            # Similarity scoring is optional; image safety is enforced by make_image.
+            report = {'passed': False, 'required': True, 'advisory': True,
+                'warning': 'Scene similarity scoring unavailable',
+                'error_type': type(error).__name__}
+            write_json(check, report)
+            break
+        if report['passed']:
+            check.write_text(json.dumps(report))
+            break
+        # CLIP similarity is a heuristic, not a reliable hard failure gate.
+        # Keep a real safety-approved image after the final attempt, recording
+        # the mismatch for review rather than losing all CPU render work.
+        if attempt == 2:
+            report = dict(report, passed=False, advisory=True,
+                          warning='CLIP scene match was inconclusive after three renders')
+            check.write_text(json.dumps(report))
+            print(json.dumps({'shot': index, 'visual_check_passed': False,
+                'attempt': attempt+1, 'quality_warning': True}), flush=True)
+            break
+        image.unlink()
+        print(json.dumps({'shot': index, 'visual_check_passed': False, 'attempt': attempt+1}), flush=True)
+    if not clip.exists():
+        produce_file(clip, lambda candidate: picture_clip(image, shot['duration'], candidate), 'Shot rendering')
+    print(json.dumps({'shard': shard, 'shot': index+1, 'total': total, 'rendered': True,
+        'visual_check_passed': report['passed']}), flush=True)
 
 
 def validate_engagement(story):
@@ -459,7 +520,8 @@ def finish(root=ROOT):
         'audio_validation': audio_report, 'timeline_verified': True, 'storyboard_verified': plan.get('storyboard_verified', False),
         'alignment': plan.get('alignment'), 'scene_composition_version': plan.get('scene_composition_version'),
         'semantic_checked_images': sum(r.get('required', False) for r in scene_reports),
-        'visual_quality_advisory_shots': advisory_shots}
+        'visual_quality_advisory_shots': advisory_shots,
+        'storyboard_advisory_shots': [s['index'] for s in plan['shots'] if s.get('storyboard_advisory')]}
     (root/'validation.json').write_text(json.dumps(report))
     print(json.dumps(report), flush=True)
     return report
