@@ -11,6 +11,7 @@ import subprocess
 import textwrap
 import time
 from zoneinfo import ZoneInfo
+from resilience import produce_file, retry_local
 
 
 def required(name):
@@ -303,15 +304,15 @@ def make_image(prompt, path):
         'eerie shadows, dim moonlight, suspenseful non-graphic scene, landscape composition, ' + prompt)
     if os.getenv('IMAGE_BACKEND', 'cpu') == 'cpu':
         from image_cpu import generate
-        generate(prompt + ', no text, no watermark', path)
+        produce_file(path, lambda candidate: generate(prompt + ', no text, no watermark', candidate), 'Image generation')
         return
     if os.getenv('IMAGE_BACKEND') != 'hf':
         raise ValueError('IMAGE_BACKEND must be cpu or hf')
     from huggingface_hub import InferenceClient
-    image = InferenceClient(api_key=required('HF_TOKEN')).text_to_image(
+    image = retry_local(lambda: InferenceClient(api_key=required('HF_TOKEN')).text_to_image(
         prompt=prompt + ', cinematic lighting, landscape composition, no text or watermarks',
-        model=required('IMAGE_MODEL'), width=1024, height=576)
-    image.save(path)
+        model=required('IMAGE_MODEL'), width=1024, height=576), 'Hosted image generation')
+    produce_file(path, image.save, 'Image save')
 
 
 def speech_chunks(text, limit=200):
@@ -334,14 +335,14 @@ def make_narration(text, path):
     if os.getenv('TTS_BACKEND', 'kokoro') != 'kokoro':
         raise RuntimeError('TTS_BACKEND must be kokoro; hosted narration is disabled')
     from voice_cpu import generate
-    generate(text, path)
+    produce_file(path, lambda candidate: generate(text, candidate), 'Narration generation')
 
 
 def transcribe(audio):
     if os.getenv('CAPTION_BACKEND', 'cpu') != 'cpu':
         raise RuntimeError('CAPTION_BACKEND must be cpu; hosted transcription is disabled')
     from voice_cpu import transcribe_audio
-    return transcribe_audio(audio)
+    return retry_local(lambda: transcribe_audio(audio), 'Word alignment')
 
 
 def aligned_subtitles(word_lists, lengths, path):
