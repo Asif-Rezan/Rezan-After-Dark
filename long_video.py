@@ -88,7 +88,7 @@ def storyboard(root=ROOT, ask=None, pause=None):
     pending = [shot for shot in shots if not valid_visual(shot.get('visual_action'))]
     for begin in range(0, len(pending), 8):
         batch = pending[begin:begin+8]
-        properties = {f"shot_{shot['index']:03}": {'type': 'string'} for shot in batch}
+        properties = {f"shot_{shot['index']:03}": w.narration_text_schema(12, 22) for shot in batch}
         schema = {'type': 'object', 'properties': properties,
                   'required': list(properties), 'additionalProperties': False}
         context = {str(shot['chapter']): story['scenes'][shot['chapter']]['narration'] for shot in batch}

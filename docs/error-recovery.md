@@ -4,7 +4,8 @@ The storyboard failure in Actions run 40261314201 was caused by a model response
 outside the accepted 5–30 word range. It was a content validation failure, not a
 narration or OAuth failure.
 
-Storyboard responses now get up to three attempts. Valid shots survive partial
+The decoder schema now constrains prompt word counts before generation.
+Storyboard responses get up to three attempts. Valid shots survive partial
 responses and restarts. If a shot still has no valid prompt, a short illustration
 prompt is derived from its measured spoken window and recorded as an advisory.
 Missing source narration and mismatched source hashes remain errors. The final

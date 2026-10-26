@@ -59,6 +59,7 @@ class ResilienceTests(unittest.TestCase):
             result = lv.storyboard(root, ask=ask, pause=lambda _: None)
             schema = ask.call_args.args[1]['response_format']['json_schema']['schema']
             self.assertEqual(schema['required'], ['shot_001'])
+            self.assertIn('pattern', schema['properties']['shot_001'])
             self.assertEqual(result['shots'][0]['visual_action'], plan['shots'][0]['visual_action'])
 
     def test_missing_source_still_fails(self):
