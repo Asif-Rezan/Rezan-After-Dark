@@ -170,6 +170,25 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(description_parts(self.payload, self.topic),
             (self.payload['description_intro'], self.payload['description_details']))
 
+    def test_decoder_schema_enforces_thumbnail_question_format(self):
+        from jsonschema import Draft202012Validator
+        from video_packaging import HOOK_SCHEMA
+        validator = Draft202012Validator(HOOK_SCHEMA)
+        for hook in ('WHO ANSWERS?', 'WHY THIS FLOOR?', 'WHAT IS BEHIND THE DOOR?'):
+            self.assertTrue(validator.is_valid(hook), hook)
+        for hook in ('THE LOCKED DOOR', 'WHO?', 'WHEN DID IT OPEN?',
+                     'WHO ANSWERS', 'WHY  THIS FLOOR?',
+                     'WHAT IS BEHIND THE LOCKED BASEMENT DOOR?',
+                     'WHAT SUPERCALIFRAGILISTIC?'):
+            self.assertFalse(validator.is_valid(hook), hook)
+        def ask(prompt, limit, schema):
+            for key in ('option_a', 'option_b', 'option_c'):
+                self.assertEqual(schema['properties'][key]['properties']['thumbnail_text'],
+                                 HOOK_SCHEMA)
+            return self.payload
+        request_package(self.story, self.topic, ask,
+                        pause=lambda _: self.fail('Unnecessary retry'))
+
     def test_successful_metadata_does_not_retry(self):
         calls = []
         def ask(prompt, limit, schema):

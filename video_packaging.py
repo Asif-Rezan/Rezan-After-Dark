@@ -7,6 +7,13 @@ from thumbnail_design import hook_layout
 CLICKBAIT = re.compile(r'\b(?:shocking|unbelievable|exposed|proof|finally revealed|they hid|you won.t believe)\b', re.I)
 VAGUE_HOOK = re.compile(r'^(?:WHAT HAPPENED|THE HIDDEN TRUTH|WHAT IS THIS|WHAT\'S INSIDE)\?$', re.I)
 QUESTION_OPENERS = {'HOW', 'WHY', 'WHAT', 'WHO', 'WHERE'}
+# Enforce the mechanical question format during local Qwen decoding, not just
+# after spending several minutes generating each complete package.
+HOOK_SCHEMA = {
+    'type': 'string',
+    'maxLength': 30,
+    'pattern': r"^(HOW|WHY|WHAT|WHO|WHERE)( [A-Z][A-Z0-9'-]{0,11}){1,4}\?$",
+}
 
 
 def _plain(value):
@@ -135,8 +142,8 @@ def choose_package(story, topic, payload):
 def request_package(story, topic, ask, pause=None):
     pause = pause or time.sleep
     text = {'type': 'string'}
-    option = {'type': 'object', 'properties': {k: text for k in
-              ('title', 'thumbnail_text', 'thumbnail_prompt')},
+    option = {'type': 'object', 'properties': {
+              'title': text, 'thumbnail_text': HOOK_SCHEMA, 'thumbnail_prompt': text},
               'required': ['title', 'thumbnail_text', 'thumbnail_prompt'], 'additionalProperties': False}
     schema = {'type': 'object', 'properties': {
         'option_a': option, 'option_b': option, 'option_c': option,
@@ -156,7 +163,8 @@ Each title: 35-75 characters, put the exact search subject phrase in the first 5
 accurately promise the suspense and central mystery of this story, use normal capitalization.
 Avoid generic "mystery revealed" wording, sensational certainty, false true-story claims and misleading clickbait.
 Thumbnail text: a SPECIFIC unresolved question with a curiosity gap, 2-5 short words,
-maximum 30 characters, ending in ?. Start with HOW, WHY, WHAT, WHO or WHERE.
+maximum 30 characters, ending in ?. Use UPPERCASE words with single spaces.
+Start with HOW, WHY, WHAT, WHO or WHERE. Each following word is at most 12 characters.
 The question must be addressed in this episode. Avoid vague
 questions such as WHAT HAPPENED? or spoilers of the final twist.
 Complement the title without repeating its phrasing. It must be legible on a phone.
