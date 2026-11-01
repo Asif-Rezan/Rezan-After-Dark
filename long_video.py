@@ -486,7 +486,7 @@ def validate_scene_reports(plan, scene_reports):
 
 def finish(root=ROOT):
     from music_cpu import generate
-    from thumbnail_design import render_thumbnail
+    from thumbnail_design import generate_thumbnail
     plan = json.loads((root/'plan.json').read_text())
     clips = [root/f"shot-{s['index']:03}.mp4" for s in plan['shots']]
     if not all(p.exists() for p in clips):
@@ -505,10 +505,7 @@ def finish(root=ROOT):
         '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-c:a', 'aac', '-movflags', '+faststart', str(root/'video.mp4'))
     metadata = w.check_video(root/'video.mp4')
     story = json.loads((root/'story.json').read_text())
-    os.environ['IMAGE_NEGATIVE_PROMPT'] = ''
-    os.environ['IMAGE_SEED'] = '9931'
-    w.make_image(story['thumbnail_prompt'], root/'thumbnail-source.png')
-    render_thumbnail(root/'thumbnail-source.png', story['thumbnail_text'], root/'thumbnail.jpg', story.get('category', 'Horror'))
+    generate_thumbnail(story, root, run_id())
     scene_reports = [json.loads((root/f"shot-{s['index']:03}.qa.json").read_text()) for s in plan['shots']]
     advisory_shots = validate_scene_reports(plan, scene_reports)
     print(json.dumps({'visual_quality_advisory_count': len(advisory_shots), 'shot_indices': advisory_shots}), flush=True)
