@@ -19,6 +19,7 @@ concurrency:
   cancel-in-progress: false
 env:
   SAVED_RUN_ID: ${{ inputs.cleanup_run || inputs.resume_run || format('daily-{0}', github.run_id) }}
+  DAILY_ENABLED: 'true'
   RUN_SCOPED_CLEANUP: 'true'
   HF_HUB_DISABLE_XET: '1'
   OMP_NUM_THREADS: '4'

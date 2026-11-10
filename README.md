@@ -44,6 +44,8 @@ python -m unittest -v
 
 `.github/workflows/daily-upload.yml` starts at **00:00 Asia/Dhaka**, retaining the previous cron time. This is the generation start, not a guaranteed completion time. Videos remain private. The daily job uses the same dedicated Drive folder and channel `UCwNhdtzL9XZMIAMXm81UCbw`. Required repository secrets remain `YOUTUBE_TOKEN_JSON`, `DRIVE_TOKEN_JSON`, `DRIVE_FOLDER_ID`; YouTube authorization needs `youtube.upload` and `youtube.force-ssl`. See the preserved setup notes in [docs/horror-version.md](docs/horror-version.md).
 
+The scheduled workflow explicitly sets `DAILY_ENABLED=true`; direct `daily` invocation is disabled unless this flag is set. The example external cron remains disabled by default.
+
 A fresh run saves the validated lesson privately before rendering, then saves completed media and a hash manifest before inserting a YouTube video. Rendering has no image-worker matrix or music service. Metadata/caption/thumbnail failures retain assets.
 
 - Fresh dispatch: leave both inputs blank.

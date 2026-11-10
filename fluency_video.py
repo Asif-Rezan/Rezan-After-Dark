@@ -177,6 +177,8 @@ def render(lesson, root, backend='kokoro', sample=False, fps=12):
 
 def daily(root, resume_upload=False):
     """Recover from saved lesson/audio; never regenerate or reinsert an ambiguous upload."""
+    if not resume_upload and os.getenv('DAILY_ENABLED') != 'true':
+        raise RuntimeError('Daily lesson production is disabled; set DAILY_ENABLED=true explicitly')
     from workflow import Store, required, upload_private
     from daily_publish import main as verify_cleanup
     run_id = required('SAVED_RUN_ID')

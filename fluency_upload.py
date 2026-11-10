@@ -54,7 +54,7 @@ def ensure_captions(store, key, state, root):
     state['caption_id']=caption_id; store.save(key,state)
     deadline=time.monotonic()+600
     while True:
-        items=client.captions().list(part='snippet',id=caption_id).execute().get('items',[])
+        items=client.captions().list(part='snippet',videoId=state['video_id'],id=caption_id).execute().get('items',[])
         if not items or items[0]['snippet'].get('status')=='failed':
             raise RuntimeError('English captions unavailable or failed processing')
         if items[0]['snippet'].get('status')=='serving':

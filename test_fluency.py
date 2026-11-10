@@ -88,19 +88,18 @@ class FluencyTests(unittest.TestCase):
     def test_ambiguous_upload_never_regenerates_or_reinserts(self):
         class Store:
             def load(self,key,default): return {'phase':'upload_started'}
-        with patch('workflow.Store',Store), patch.dict('os.environ',{'SAVED_RUN_ID':'daily-123'}), patch('fluency_video.render') as render:
+        with patch('workflow.Store',Store), patch.dict('os.environ',{'SAVED_RUN_ID':'daily-123','DAILY_ENABLED':'true'}), patch('fluency_video.render') as render:
             with self.assertRaisesRegex(RuntimeError,'ambiguous'): daily(Path('unused'))
             render.assert_not_called()
 
     def test_upload_only_recovery_never_generates_a_missing_lesson(self):
         class Store:
             def load(self,key,default): return default
-        with patch('workflow.Store',Store), patch.dict('os.environ',{'SAVED_RUN_ID':'daily-123'}), patch('fluency_video.generate_lesson') as generate:
+        with patch('workflow.Store',Store), patch.dict('os.environ',{'SAVED_RUN_ID':'daily-123','DAILY_ENABLED':'true'}), patch('fluency_video.generate_lesson') as generate:
             with tempfile.TemporaryDirectory() as temp:
                 with self.assertRaisesRegex(RuntimeError,'No saved'): daily(Path(temp),True)
             generate.assert_not_called()
 
-if __name__=='__main__': unittest.main()
 
 class FluencyUploadTests(unittest.TestCase):
     def setUp(self):
@@ -139,6 +138,7 @@ class FluencyUploadTests(unittest.TestCase):
         from unittest.mock import MagicMock
         from fluency_upload import ensure_captions
         client=MagicMock();client.captions().list().execute.return_value={'items':[]}
+        client.captions().list.reset_mock()
         store=MagicMock();state={'video_id':'v','thumbnail_uploaded':True,'captions_upload_started':True}
         with tempfile.TemporaryDirectory() as temp, patch('googleapiclient.discovery.build',return_value=client), \
                 patch('google.oauth2.credentials.Credentials.from_authorized_user_info'), \
@@ -151,12 +151,15 @@ class FluencyUploadTests(unittest.TestCase):
         from fluency_upload import ensure_captions
         client=MagicMock();client.captions().list().execute.return_value={'items':[{
             'id':'caption-1','snippet':{'language':'en','name':'English conversation','status':'serving'}}]}
+        client.captions().list.reset_mock()
         store=MagicMock();state={'video_id':'v','thumbnail_uploaded':True,'captions_upload_started':True}
         with tempfile.TemporaryDirectory() as temp, patch('googleapiclient.discovery.build',return_value=client), \
                 patch('google.oauth2.credentials.Credentials.from_authorized_user_info'), \
                 patch.dict('os.environ',{'YOUTUBE_TOKEN_JSON':'{}'}):
             ensure_captions(store,'key',state,Path(temp))
         self.assertTrue(state['captions_uploaded']);client.captions().insert.assert_not_called()
+        for call in client.captions().list.call_args_list:
+            self.assertEqual(call.kwargs.get('videoId'),'v')
 
     def test_each_lesson_renders_a_topic_specific_thumbnail(self):
         from PIL import ImageChops
@@ -165,3 +168,21 @@ class FluencyUploadTests(unittest.TestCase):
             p,q=Path(temp)/'a.png',Path(temp)/'b.png'
             thumbnail(self.lesson,p);thumbnail(other,q)
             self.assertIsNotNone(ImageChops.difference(Image.open(p),Image.open(q)).getbbox())
+
+    def test_external_daily_invocation_is_disabled_by_default(self):
+        with patch.dict('os.environ', {'DAILY_ENABLED':'false'}):
+            with self.assertRaisesRegex(RuntimeError, 'disabled'): daily(Path('unused'))
+
+    def test_repeated_packaging_stops_after_bounded_attempts(self):
+        from fluency_lessons import PREFIX, TOPICS
+        calls=[]
+        def ask(prompt,schema):
+            calls.append(prompt)
+            return {'angle':'Ordering Coffee Politely','headline':['ORDER','COFFEE','POLITELY']}
+        history=[{'topic_id':topic[0], 'title':PREFIX+' | Ordering Coffee Politely | A2 Practice',
+                  'headline':['ORDER','COFFEE','POLITELY']} for topic in TOPICS]
+        with self.assertRaisesRegex(ValueError,'Duplicate title'):
+            generate_lesson('2026-11-10',history,ask)
+        self.assertEqual(len(calls),3)
+
+if __name__=='__main__': unittest.main()
