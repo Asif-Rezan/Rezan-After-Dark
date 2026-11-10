@@ -63,13 +63,13 @@ def validate_lesson(lesson):
 
 
 def dialogue_schema():
-    turn = {'type': 'object', 'properties': {
-        'speaker': {'type': 'string', 'enum': list(SPEAKERS)},
-        'text': {'type': 'string', 'minLength': 8, 'maxLength': 130}},
-        'required': ['speaker', 'text'], 'additionalProperties': False}
-    return {'type': 'object', 'properties': {'dialogue': {'type': 'array',
-        'minItems': 16, 'maxItems': 20, 'items': turn}},
-        'required': ['dialogue'], 'additionalProperties': False}
+    # Fixed keys assign speakers in code; constrained English word counts are
+    # enforced by the same production grammar already used for narration.
+    from workflow import narration_text_schema
+    properties = {f'line_{i:02}': narration_text_schema(6, 18) for i in range(1, 17)}
+    return {'type': 'object', 'properties': {'dialogue': {
+        'type': 'object', 'properties': properties, 'required': list(properties),
+        'additionalProperties': False}}, 'required': ['dialogue'], 'additionalProperties': False}
 
 
 def generate_lesson(day, previous, ask=None):
@@ -101,21 +101,27 @@ def generate_lesson(day, previous, ask=None):
 Two adult speakers only: Alex (male), Emma (female). Situation {index + 1} of 3.
 Earlier dialogue openings to avoid repeating: {json.dumps(summaries)}.
 Create a different concrete everyday situation within this topic. Alternate Alex and Emma.
-Return 16–20 short natural turns, 8–18 spoken words each. Correct grammar, natural polite
+Return exactly 16 short natural turns, preferably 8–14 words each (allowed 6–18).
+Use dialogue keys line_01 through line_16. Odd lines are Emma, even lines Alex.
+Each value is ONLY spoken English text, plain ASCII punctuation, ending with . ! or ?.
+Do not put speaker names or quote marks into the values. Correct grammar, natural polite
 English, clear referents, coherent responses. No narrator, headings, stage directions,
 pronunciation spellings, teaching claims, links, or invented facts about real people.
 No fluency guarantees. Return only the requested JSON dialogue.'''
+        feedback = ''
         for attempt in range(3):
-            data = ask(prompt + (' Repair the prior result: alternate speakers, 16–20 turns, 8–18 words per turn.' if attempt else ''), dialogue_schema())
-            dialogue = data.get('dialogue', [])
-            valid = isinstance(dialogue, list) and 16 <= len(dialogue) <= 20
+            data = ask(prompt + feedback, dialogue_schema())
+            lines = data.get('dialogue', {})
+            keys = [f'line_{i:02}' for i in range(1, 17)]
+            valid = isinstance(lines, dict) and set(lines) == set(keys)
             if valid:
-                valid = all(isinstance(line, dict) and line.get('speaker') in SPEAKERS
-                    and isinstance(line.get('text'), str) and 8 <= len(line['text'].split()) <= 18
-                    and (i == 0 or line['speaker'] != dialogue[i-1]['speaker'])
-                    for i, line in enumerate(dialogue))
+                valid = all(isinstance(lines[key], str) and 6 <= len(lines[key].split()) <= 18 for key in keys)
             if valid:
-                break
+                dialogue = [dict(speaker='Emma' if i % 2 == 0 else 'Alex', text=lines[key])
+                            for i, key in enumerate(keys)]
+                if any('?' in line['text'] for line in dialogue):
+                    break
+            feedback = f' Repair attempt {attempt + 1}: use all 16 line keys, 6–18 words each, and include natural questions ending in a question mark.'
         else:
             raise ValueError('Generated dialogue failed validation after three attempts')
         summaries.append(dialogue[0]['text'])

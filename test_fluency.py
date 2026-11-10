@@ -30,9 +30,9 @@ class FluencyTests(unittest.TestCase):
         def ask(prompt, schema):
             if 'headline' in schema['properties']:
                 return {'angle':'Ordering Coffee Politely','headline':['ORDER','COFFEE','POLITELY']}
-            return {'dialogue':[dict(speaker='Emma' if i%2==0 else 'Alex',
-                text='Could you please tell me what you would like today?' if i%2==0 else
-                'I would like a small coffee with oat milk please.') for i in range(16)]}
+            return {'dialogue':{f'line_{i+1:02}':
+                'Could you please tell me what you would like today?' if i%2==0 else
+                'I would like a small coffee with oat milk please.' for i in range(16)}}
         lesson=generate_lesson('2026-11-10',[],ask)
         next_lesson=generate_lesson('2026-11-10',[{'topic_id':lesson['topic_id']}],ask)
         self.assertNotEqual(lesson['topic_id'],next_lesson['topic_id'])
