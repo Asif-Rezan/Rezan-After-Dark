@@ -4,3 +4,6 @@ Generate an original topic-specific yellow thumbnail and timed English subtitles
 Use the required Learn English While You Sleep title, description and first tag.
 Upload privately to the existing verified channel, then verify HD, metadata and captions.
 Requested by the owner on 2026-11-10.
+
+Owner requested another full video using the updated 16-worker staged pipeline on 2026-11-10.
+Keep the existing production run; execute this request under the shared concurrency guard.
