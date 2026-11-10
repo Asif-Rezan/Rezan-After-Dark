@@ -8,7 +8,7 @@ import time
 def disposable(name):
     return name in {'plan.json', 'narration.wav', 'captions.srt', 'video.mp4',
         'thumbnail.jpg', 'music.audio', 'thumbnail-source.png'} or bool(
-        re.fullmatch(r'shot-\d+\.(png|mp4|qa\.json)', name))
+        re.fullmatch(r'(?:shot-\d+\.(?:png|mp4|qa\.json)|speech-[a-f0-9]{64}\.wav|render-0(?:0[0-9]|1[0-5])\.mp4)', name))
 
 
 def validate_remote(video, state, channel):
@@ -98,7 +98,7 @@ def cleanup(store, run, state):
     store.save(key, journal)
 
 
-def main():
+def main(cleanup_media=True):
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
     from workflow import Store, required
@@ -135,9 +135,14 @@ def main():
     if not any(h.get('run') == run for h in history):
         history.append({'run': run, 'video_id': state['video_id'], 'title': state['story']['title'], 'hash': state['hash']})
     store.save('history.json', history)
-    cleanup(store, run, state)
-    print(json.dumps({'run': run, 'video_id': state['video_id'], 'privacy': 'private', 'verified': True, 'cleanup_complete': True}))
+    if cleanup_media:
+        cleanup(store, run, state)
+    print(json.dumps({'run': run, 'video_id': state['video_id'], 'privacy': 'private', 'verified': True, 'cleanup_complete': cleanup_media}))
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--verify-only',action='store_true')
+    args=parser.parse_args()
+    main(cleanup_media=not args.verify_only)

@@ -62,7 +62,7 @@ def make_speech(text, speaker, output, backend):
         raise ValueError('Unknown speech backend')
 
 
-def prepare_audio(lesson, root, backend):
+def prepare_audio(lesson, root, backend, require_cached=False):
     """Content-addressed speech includes speaker and settings; repeat turns reuse audio."""
     root.mkdir(parents=True, exist_ok=True)
     cache = root / 'speech'
@@ -75,6 +75,8 @@ def prepare_audio(lesson, root, backend):
             key = digest([turn['text'], turn['speaker'], backend, 'fluency-voice-v1', .9, 0])
             path = cache / f'{key}.wav'
             if not path.exists():
+                if require_cached:
+                    raise RuntimeError('Required parallel voice asset is missing; refusing synthesis in timing stage')
                 temp = path.with_name(key + '-pending.wav')
                 make_speech(turn['text'], turn['speaker'], temp, backend)
                 with wave.open(str(temp)) as check:
@@ -120,60 +122,87 @@ def speech_energy(path, fps):
     return [sum(out[max(0,i-1):i+2])/len(out[max(0,i-1):i+2]) for i in range(len(out))]
 
 
+def frame_ranges(frame_count, parts=4):
+    if not isinstance(parts,int) or not 1 <= parts <= 16 or frame_count < parts:
+        raise ValueError('Invalid render partition')
+    return [(frame_count*i//parts, frame_count*(i+1)//parts) for i in range(parts)]
+
+
+def frame_at(lesson, animator, events, energy, total, fps, frame_index, event_index=0):
+    t = frame_index/fps
+    while event_index < len(events)-1 and t >= events[event_index]['end']:
+        event_index += 1
+    e = events[event_index]
+    amplitude = energy[min(frame_index,len(energy)-1)] if 'audio' in e and energy else 0.
+    speaker = e['turn']['speaker'] if 'audio' in e else None
+    bg = animator.frame(t,speaker,amplitude)
+    return lesson_frame(bg,lesson,e['turn'],t/total,e.get('practice',False)),event_index
+
+
+def render_frames(lesson, root, events, total, fps, start_frame, end_frame, output, with_audio=False):
+    if not 0 <= start_frame < end_frame <= math.ceil(total*fps):
+        raise ValueError('Invalid global frame range')
+    print(json.dumps({'stage':'render','start_frame':start_frame,'end_frame':end_frame}),flush=True)
+    animator = CharacterAnimator()
+    energy = speech_energy(root/'narration.wav',fps)
+    command = ['ffmpeg','-y','-v','error','-f','rawvideo','-pix_fmt','rgb24','-s','1280x720',
+               '-r',str(fps),'-i','-']
+    if with_audio:
+        command += ['-i',str(root/'narration.wav'),'-map','0:v','-map','1:a']
+    command += ['-c:v','libx264','-preset','fast','-crf','20','-pix_fmt','yuv420p']
+    if with_audio:
+        command += ['-c:a','aac','-b:a','192k','-af','loudnorm=I=-16:TP=-1.5:LRA=7','-t',str(total)]
+    else:
+        command += ['-an']
+    command += ['-movflags','+faststart',str(output)]
+    with (root/f'{output.stem}.log').open('wb') as log:
+        process = subprocess.Popen(command,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=log)
+        event_index=0
+        try:
+            for frame_index in range(start_frame,end_frame):
+                im,event_index=frame_at(lesson,animator,events,energy,total,fps,frame_index,event_index)
+                if frame_index == min(start_frame+12,end_frame-1):
+                    im.save(root/f'{output.stem}-preview.jpg')
+                process.stdin.write(im.tobytes())
+                if (frame_index-start_frame+1)%(fps*30)==0:
+                    print(json.dumps({'stage':'render','frames_done':frame_index-start_frame+1,'frames_total':end_frame-start_frame}),flush=True)
+            process.stdin.close()
+            if process.wait()!=0:
+                raise RuntimeError('FFmpeg rendering failed; inspect local renderer log')
+        except BaseException:
+            process.kill();process.wait();output.unlink(missing_ok=True)
+            raise
+
+
+def write_validation(lesson,root,total,backend,fps):
+    actual=seconds(root/'video.mp4')
+    if abs(actual-total)>.2:
+        raise ValueError('Final video duration does not match dialogue timing')
+    write_json(root/'lesson.json',lesson)
+    write_json(root/'validation.json',dict(duration_seconds=actual,format='english-fluency',fps=fps,
+        animated=True,animation='Python Pillow audio-reactive mouth shapes, breathing, sway and nods; not phoneme lip-sync',
+        voices={'Alex':'am_michael' if backend=='kokoro' else 'en-US-GuyNeural',
+                'Emma':'af_heart' if backend=='kokoro' else 'en-US-JennyNeural'},
+        lesson_hash=digest(lesson),backend=backend,private=True,
+        asset_hashes={name:file_hash(root/name) for name in ('video.mp4','thumbnail.jpg','captions.srt')}))
+    return actual
+
+
 def render(lesson, root, backend='kokoro', sample=False, fps=12):
     validate_lesson(lesson)
-    if fps not in (12, 24):
+    if fps not in (12,24):
         raise ValueError('Animation frame rate must be 12 or 24')
-    events, total = prepare_audio(lesson, root, backend)
-    lower, upper = (60, 90) if sample else (480, 1200)
-    if not lower <= total <= upper:
+    events,total=prepare_audio(lesson,root,backend)
+    lower,upper=(60,90) if sample else (480,1200)
+    if not lower<=total<=upper:
         raise ValueError(f'Measured narration {total:.1f}s outside {lower}–{upper}s; revise lesson before rendering/upload')
-    thumbnail(lesson, root/'thumbnail.jpg')
-    animator = CharacterAnimator()
-    for e in events:
-        if 'audio' in e:
-            e['energy'] = speech_energy(e['audio'], fps)
-    pending = root/'video.pending.mp4'
-    command = ['ffmpeg', '-y', '-v', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', '1280x720', '-r', str(fps), '-i', '-',
-        '-i', str(root/'narration.wav'), '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'fast', '-crf', '20',
-        '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-af', 'loudnorm=I=-16:TP=-1.5:LRA=7',
-        '-t', str(total), '-movflags', '+faststart', str(pending)]
-    # File-backed stderr prevents a blocked pipe during a long CPU render.
-    with (root/'ffmpeg.log').open('wb') as log:
-        process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=log)
-        event_index = 0
-        try:
-            for frame_index in range(math.ceil(total*fps)):
-                t = frame_index/fps
-                while event_index < len(events)-1 and t >= events[event_index]['end']:
-                    event_index += 1
-                e = events[event_index]
-                energy = e.get('energy', [])
-                offset = min(len(energy)-1, int((t-e['start'])*fps)) if energy else -1
-                speaker = e['turn']['speaker'] if energy else None
-                bg = animator.frame(t, speaker, energy[max(0,offset)] if energy else 0.)
-                im = lesson_frame(bg, lesson, e['turn'], t/total, e.get('practice', False))
-                if frame_index == min(12, math.ceil(total*fps)-1):
-                    im.save(root/'preview.jpg')
-                process.stdin.write(im.tobytes())
-            process.stdin.close()
-            if process.wait() != 0:
-                raise RuntimeError('FFmpeg rendering failed; inspect local ffmpeg.log')
-        except BaseException:
-            process.kill(); process.wait(); pending.unlink(missing_ok=True)
-            raise
-    actual = seconds(pending)
-    if abs(actual-total) > .2:
-        raise ValueError('Final video duration does not match dialogue timing')
+    thumbnail(lesson,root/'thumbnail.jpg')
+    pending=root/'video.pending.mp4'
+    render_frames(lesson,root,events,total,fps,0,math.ceil(total*fps),pending,with_audio=True)
     pending.replace(root/'video.mp4')
-    write_json(root/'lesson.json', lesson)
-    write_json(root/'validation.json', dict(duration_seconds=actual, format='english-fluency',
-        fps=fps, animated=True, animation='Python Pillow audio-reactive mouth shapes, breathing, sway and nods; not phoneme lip-sync',
-        voices={'Alex': 'am_michael' if backend=='kokoro' else 'en-US-GuyNeural',
-                'Emma': 'af_heart' if backend=='kokoro' else 'en-US-JennyNeural'},
-        lesson_hash=digest(lesson), backend=backend, private=True,
-        asset_hashes={name: file_hash(root/name) for name in ('video.mp4','thumbnail.jpg','captions.srt')}))
-    return actual
+    preview=root/'video.pending-preview.jpg'
+    if preview.exists(): preview.replace(root/'preview.jpg')
+    return write_validation(lesson,root,total,backend,fps)
 
 
 def daily(root, resume_upload=False):
