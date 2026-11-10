@@ -1,5 +1,8 @@
 name: Daily animated English fluency lesson
 on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/private-video-trigger.txt']
   schedule:
     - cron: '0 18 * * *' # 00:00 Asia/Dhaka (following day); uploads stay private
   workflow_dispatch:

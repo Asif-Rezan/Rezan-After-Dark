@@ -1,7 +1,6 @@
-Start a fresh private horror video with slow deep narration, 15–20 minute duration and 10-second image intervals.
-Generate the script locally with Qwen/Qwen3-4B-Instruct-2507; no hosted text API.
-Measure and enforce chapter word targets before generating narration audio.
-Enforce the narration word range directly in the local Qwen decoding grammar.
-Use decoder word bounds for measured audio-duration corrections as well.
-Verify real Kokoro narration with the pinned tokenizer stack before the full Qwen story.
-Constrain thumbnail questions in the Qwen decoding schema before starting fresh video generation.
+Start one fresh full English fluency lesson using the current approved layout.
+Two Kokoro voices; Python mouth/body animation; complete arms and safe margins.
+Generate an original topic-specific yellow thumbnail and timed English subtitles.
+Use the required Learn English While You Sleep title, description and first tag.
+Upload privately to the existing verified channel, then verify HD, metadata and captions.
+Requested by the owner on 2026-11-10.
