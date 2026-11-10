@@ -87,11 +87,24 @@ def generate_lesson(day, previous, ask=None):
     package_schema = {'type':'object','properties':{'angle':{'type':'string','minLength':8,'maxLength':48},
         'headline':{'type':'array','minItems':3,'maxItems':3,'items':{'type':'string','pattern':"^[A-Z0-9 '-]{1,18}$"}}},
         'required':['angle','headline'],'additionalProperties':False}
-    package = ask(f'Plan a fresh A2 adult English lesson about {topic}. Return angle: a specific everyday situation, max 48 characters, and headline: exactly three short uppercase thumbnail lines, each at most 18 characters. Make the headline clearly about this situation. Avoid these recent titles and headlines: {json.dumps(previous[-8:])}. No fluency guarantees, no claims about subconscious learning. JSON only.', package_schema)
-    angle = package['angle'].strip()
-    headline = package['headline']
-    if not 8 <= len(angle) <= 48 or any(ord(c)<32 for c in angle):
-        raise ValueError('Invalid lesson angle')
+    # Keep same-topic history even after it leaves the short topic rotation window.
+    packaging_history = [dict(title=item.get('title',''), headline=item.get('headline',[]))
+                         for item in previous if item.get('topic_id') == topic_id][-12:]
+    packaging_history += [dict(title=item.get('title',''), headline=item.get('headline',[])) for item in previous[-8:]]
+    seen_headlines = {tuple(item.get('headline', [])) for item in previous}
+    seen_titles = {item.get('title') for item in previous}
+    for attempt in range(3):
+        package = ask(f'Plan a fresh A2 adult English lesson about {topic}. Return angle: a specific everyday situation, max 48 characters, and headline: exactly three short uppercase thumbnail lines, each at most 18 characters. Make the headline clearly about this situation. Avoid these earlier titles and headlines: {json.dumps(packaging_history)}. Attempt {attempt + 1}: the complete headline and title must be different from earlier videos. No fluency guarantees, no claims about subconscious learning. JSON only.', package_schema)
+        angle = package['angle'].strip()
+        headline = package['headline']
+        if not 8 <= len(angle) <= 48 or any(ord(c)<32 for c in angle):
+            raise ValueError('Invalid lesson angle')
+        title = f'{PREFIX} | {angle} | A2 Practice'
+        if tuple(headline) not in seen_headlines and title not in seen_titles:
+            break
+        packaging_history.append(dict(title=title, headline=headline))
+    else:
+        raise ValueError('Duplicate title or thumbnail headline after three attempts')
     topic = angle
     turns = [dict(speaker='Emma', text=f"Let's practice {topic.lower()}. Listen first, then speak with us.",
                   section='LISTEN', pause=.6)]
