@@ -1,0 +1,43 @@
+name: English fluency production check
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/fluency-check.yml', 'fluency_lessons.py', 'fluency_render.py', 'fluency_video.py', 'fluency_voice_check.py']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: english-fluency-production-check
+  cancel-in-progress: true
+jobs:
+  production:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      HF_HUB_DISABLE_XET: '1'
+      OMP_NUM_THREADS: '4'
+      MKL_NUM_THREADS: '4'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - name: Install production runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg espeak-ng
+          pip install -r requirements.txt -r requirements-story.txt
+          pip install 'torch==2.7.1' --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-cpu.txt
+      - name: Run component and recovery checks
+        run: python -m unittest -v
+      - name: Generate a fresh full lesson with the real pinned Qwen CPU model
+        run: python -u fluency_video.py generate --output output/production-check
+      - name: Verify both real Kokoro voices
+        run: python -u fluency_voice_check.py
+      - name: Render and decode the animated sample with production voices
+        run: |
+          python -u fluency_video.py sample --output output/production-sample
+          ffmpeg -v error -i output/production-sample/video.mp4 -f null -

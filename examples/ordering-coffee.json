@@ -1,0 +1,117 @@
+{
+  "format": "english-fluency",
+  "level": "A2",
+  "topic_id": "coffee",
+  "topic": "Ordering Coffee",
+  "headline": [
+    "ORDER",
+    "COFFEE",
+    "IN ENGLISH"
+  ],
+  "title": "Learn English While You Sleep | Ordering Coffee | A2 Practice",
+  "description": "Learn English While You Sleep | Ordering Coffee. Practice ordering coffee with Alex and Emma. Listen, repeat and answer aloud. Original A2 English lesson with two voices and on-screen subtitles.",
+  "tags": [
+    "Learn English While You Sleep",
+    "English conversation",
+    "A2 English",
+    "Ordering coffee"
+  ],
+  "turns": [
+    {
+      "speaker": "Emma",
+      "text": "Let's practice ordering coffee. Listen to Emma and Alex.",
+      "section": "LISTEN",
+      "pause": 0.5
+    },
+    {
+      "speaker": "Emma",
+      "text": "Hi! What can I get for you today?",
+      "section": "LISTEN",
+      "pause": 0.35
+    },
+    {
+      "speaker": "Alex",
+      "text": "Hi! I'd like a coffee, please.",
+      "section": "LISTEN",
+      "pause": 0.35
+    },
+    {
+      "speaker": "Emma",
+      "text": "Of course. Would you like it hot or iced?",
+      "section": "LISTEN",
+      "pause": 0.35
+    },
+    {
+      "speaker": "Alex",
+      "text": "Hot, please. And could I have oat milk?",
+      "section": "LISTEN",
+      "pause": 0.35
+    },
+    {
+      "speaker": "Emma",
+      "text": "Absolutely! What size would you like?",
+      "section": "LISTEN",
+      "pause": 0.35
+    },
+    {
+      "speaker": "Alex",
+      "text": "A medium, please. How much is that?",
+      "section": "LISTEN",
+      "pause": 0.35
+    },
+    {
+      "speaker": "Emma",
+      "text": "That's four dollars. Anything else?",
+      "section": "LISTEN",
+      "pause": 0.35
+    },
+    {
+      "speaker": "Alex",
+      "text": "No, thank you. That's all.",
+      "section": "LISTEN",
+      "pause": 0.5
+    },
+    {
+      "speaker": "Emma",
+      "text": "Now, repeat after Alex. Say each phrase out loud.",
+      "section": "REPEAT",
+      "pause": 0.5
+    },
+    {
+      "speaker": "Alex",
+      "text": "I'd like a coffee, please.",
+      "section": "REPEAT",
+      "pause": 2.5
+    },
+    {
+      "speaker": "Alex",
+      "text": "Could I have oat milk?",
+      "section": "REPEAT",
+      "pause": 2.5
+    },
+    {
+      "speaker": "Alex",
+      "text": "How much is that?",
+      "section": "REPEAT",
+      "pause": 2.5
+    },
+    {
+      "speaker": "Emma",
+      "text": "Your turn! I'll ask, and you answer.",
+      "section": "YOUR TURN",
+      "pause": 2
+    },
+    {
+      "speaker": "Emma",
+      "text": "What can I get for you today?",
+      "section": "YOUR TURN",
+      "pause": 3.8
+    },
+    {
+      "speaker": "Emma",
+      "text": "Great! Practice again with your favorite drink.",
+      "section": "FINISH",
+      "pause": 0.6
+    }
+  ]
+}

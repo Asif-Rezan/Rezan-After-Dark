@@ -618,7 +618,7 @@ def load_music(store, root):
     return manifest.get('attribution', '')
 
 
-def upload_private(video, thumbnail, story, state, store, key, music_credit=''):
+def upload_private(video, thumbnail, story, state, store, key, music_credit='', category='24'):
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload
@@ -633,9 +633,9 @@ def upload_private(video, thumbnail, story, state, store, key, music_credit=''):
     state['thumbnail_uploaded'] = False
     state['phase'] = 'upload_started'
     store.save(key, state)
+    from fluency_upload import video_body
     request = client.videos().insert(part='snippet,status', notifySubscribers=False,
-        body={'snippet': {'title': story['title'], 'description': state['upload_description'], 'tags': story['tags'], 'categoryId': '24',
-             'defaultLanguage': 'en'}, 'status': {'privacyStatus': 'private', 'selfDeclaredMadeForKids': False}},
+        body=video_body(story, state['upload_description'], category),
         media_body=MediaFileUpload(str(video), chunksize=8*1024*1024, resumable=True))
     result = None
     while result is None:

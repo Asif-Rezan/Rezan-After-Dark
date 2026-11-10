@@ -2,10 +2,10 @@
 # video test passes and billable cron usage is approved.
 services:
   - type: cron
-    name: youtube-rezan-after-dark-daily
+    name: english-fluency-daily
     runtime: docker
-    schedule: "0 3 * * *"
-    dockerCommand: python workflow.py daily
+    schedule: "0 18 * * *"
+    dockerCommand: python fluency_video.py daily
     envVars:
       - key: DAILY_ENABLED
         value: "false"
@@ -13,10 +13,8 @@ services:
         value: "false"
       - key: STORY_MODEL
         value: Qwen/Qwen3-4B-Instruct-2507
-      - key: HF_TOKEN
-        sync: false
-      - key: IMAGE_MODEL
-        sync: false
+      - key: SAVED_RUN_ID
+        sync: false # Required unique daily-<numeric ID> for each invocation
       - key: YOUTUBE_TOKEN_JSON
         sync: false
       - key: EXPECTED_CHANNEL_ID

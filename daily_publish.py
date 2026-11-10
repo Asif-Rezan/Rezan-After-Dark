@@ -20,6 +20,15 @@ def validate_remote(video, state, channel):
         or set(snippet.get('tags', [])) != set(story['tags'])
         or snippet['description'] != state.get('upload_description', story['description'])):
         raise RuntimeError('Channel or metadata mismatch')
+    if state.get('format') == 'english-fluency':
+        from fluency_lessons import PREFIX
+        if (not snippet.get('tags') or snippet['tags'][0] != PREFIX
+                or snippet.get('categoryId') != '27' or snippet.get('defaultLanguage') != 'en'
+                or snippet.get('defaultAudioLanguage') != 'en' or status.get('license') != 'youtube'
+                or status.get('selfDeclaredMadeForKids') is not False
+                or status.get('embeddable') is not True or status.get('publicStatsViewable') is not True
+                or state.get('captions_uploaded') is not True):
+            raise RuntimeError('English lesson video details or caption verification incomplete')
     if (status.get('uploadStatus') in ('failed', 'rejected', 'deleted')
         or video.get('processingDetails', {}).get('processingStatus') in ('failed', 'terminated')):
         raise RuntimeError('YouTube upload failed')

@@ -1,6 +1,63 @@
 # English fluency conversation videos
 
-Migration in progress from the preserved horror pipeline.
+Creates original A2 English lessons with Alex (male) and Emma (female): a white background, two 3D storybook characters, centered timed subtitles, listen/repeat/role-play sections, Python character animation, and a separately rendered yellow thumbnail for every video. Existing Google credentials and expected channel identity stay isolated to this repository.
+
+## Video and thumbnail format
+
+- 1280×720 video at 12 fps by default (24 fps is supported locally).
+- Python/Pillow character breathing, torso sway and speech-energy-driven nods. Characters move independently; subtitles stay fixed. This is 2D puppet animation of 3D-style artwork, not facial lip-sync or a rigged 3D model.
+- Kokoro CPU voices: Alex `am_michael`, Emma `af_heart`, speed `0.9`, neutral pitch. No horror pitch filter, atmosphere or background music.
+- Daily lessons contain three original conversations, sentence repetition with speaking pauses and role play. Measured audio must be 8–20 minutes; generation stops outside that range rather than padding the lesson. The checked-in short sample uses a separate 60–90 second duration gate.
+- Qwen generates a fresh specific situation and three thumbnail headline lines, avoiding recent topics/titles. Every lesson renders its own `thumbnail.jpg` with black condensed display text, white outline, hard shadow and a slightly varied angle over exact `#FFFF00` yellow. The same approved female identity remains recognizable; the complete alpha cutout keeps hands inside the frame.
+
+## Title and upload details
+
+The title and description start with `Learn English While You Sleep | …`, and the first tag is exactly `Learn English While You Sleep`. This is the series label; the script describes actual listening, repetition and speaking practice without promising learning during sleep.
+
+Example title: **Learn English While You Sleep | Ordering Coffee | A2 Practice**.
+
+Uploads explicitly set English metadata language (`en`), English audio language (`en`), Education category (`27`), private visibility, standard YouTube license, embedding enabled, public statistics enabled and not made for kids (the lessons target adults). English SRT captions are uploaded as a separate non-draft track as well as burned into the video. The final verification checks these details, exact title/description/tags, correct channel, successful HD processing, thumbnail confirmation and serving captions before cleanup. Location, recording date, paid promotions and other inapplicable fields are not invented. End screens/cards and comment moderation are not exposed by this uploader and retain Studio settings.
+
+## Local preview
+
+Install FFmpeg and Python 3.12+:
+
+```sh
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements-fluency-preview.txt
+python fluency_video.py sample --backend edge --output output/animated-sample
+```
+
+This optional preview uses Edge Jenny/Guy over the network and needs no API key. Production stays on Kokoro CPU. Outputs include `video.mp4`, `thumbnail.jpg`, `preview.jpg`, `captions.srt`, `timeline.json`, `lesson.json` and `validation.json`. Repeated lines reuse speaker-specific content-addressed speech files.
+
+For production narration, also install `requirements.txt`, CPU PyTorch, `requirements-cpu.txt` and the system `espeak-ng` dependency. Run `python fluency_voice_check.py` to test both voices. Qwen additionally needs `requirements-story.txt` (the pinned CPU wheel is intended for the Linux runner):
+
+```sh
+python fluency_video.py generate --output output/lesson
+# Review/edit the generated lesson before local rendering.
+python fluency_video.py render --lesson output/lesson/lesson.json --output output/lesson
+python -m unittest -v
+```
+
+## GitHub daily workflow and recovery
+
+`.github/workflows/daily-upload.yml` starts at **00:00 Asia/Dhaka**, retaining the previous cron time. This is the generation start, not a guaranteed completion time. Videos remain private. The daily job uses the same dedicated Drive folder and channel `UCwNhdtzL9XZMIAMXm81UCbw`. Required repository secrets remain `YOUTUBE_TOKEN_JSON`, `DRIVE_TOKEN_JSON`, `DRIVE_FOLDER_ID`; YouTube authorization needs `youtube.upload` and `youtube.force-ssl`. See the preserved setup notes in [docs/horror-version.md](docs/horror-version.md).
+
+A fresh run saves the validated lesson privately before rendering, then saves completed media and a hash manifest before inserting a YouTube video. Rendering has no image-worker matrix or music service. Metadata/caption/thumbnail failures retain assets.
+
+- Fresh dispatch: leave both inputs blank.
+- `resume_run= daily-<original GitHub run ID>`: restore and verify completed media, then upload only. A missing asset stops recovery; it never silently regenerates in this mode. If the video already exists, reconcile thumbnail/caption completion and run verification instead of inserting again.
+- `cleanup_run= daily-<original GitHub run ID>`: verify an already completed upload and resume the existing tagged cleanup only. If captions are still incomplete, use `resume_run` instead.
+- An ambiguous `upload_started` state blocks a second video insertion. An ambiguous caption insertion is reconciled by listing the fixed English track name before considering another insertion.
+- Saved audio and captions use exact measured timings. Video, thumbnail and SRT SHA-256 values are checked during upload-only restoration.
+- The local speech cache survives retries on the same machine. A lost cloud runner cannot recover partial local narration; a normal rerun may regenerate it from the saved lesson. Upload-only recovery requires a fully saved media bundle.
+
+The **English fluency production check** workflow runs a real Qwen lesson generation, both Kokoro voices and a complete animated sample render/FFmpeg decode without Google credentials. The component check runs all unit tests.
+
+Historical horror modules and manual workflows are preserved for old-run recovery. They are not used by the daily English workflow. The legacy automatic strict horror generation trigger is now manual-only.
+
+No channel name, banner, external Google credentials or public visibility is changed by this migration.
 
 ## Restore the previous horror version
 

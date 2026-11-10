@@ -29,7 +29,7 @@ def deepen_audio(source, target, semitones):
         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 
 
-def generate(text, path):
+def generate(text, path, *, voice=None, speed=None, pitch=None):
     global _pipeline
     import soundfile as sf
     import torch
@@ -37,9 +37,13 @@ def generate(text, path):
     if _pipeline is None:
         from kokoro import KPipeline
         _pipeline = KPipeline(lang_code='a', device='cpu', repo_id='hexgrad/Kokoro-82M')
-    speed, pitch = voice_settings()
+    default_speed, default_pitch = voice_settings()
+    speed = default_speed if speed is None else speed
+    pitch = default_pitch if pitch is None else pitch
+    if not math.isfinite(speed) or not .7 <= speed <= 1.0 or not math.isfinite(pitch) or not -4 <= pitch <= 0:
+        raise ValueError("Invalid narration speed or pitch")
     parts = [audio.numpy() for _, _, audio in _pipeline(text,
-        voice=os.getenv('CPU_TTS_VOICE', 'am_michael'), speed=speed, split_pattern=r'\n+')]
+        voice=voice or os.getenv('CPU_TTS_VOICE', 'am_michael'), speed=speed, split_pattern=r'\n+')]
     if not parts:
         raise RuntimeError('Kokoro returned no narration')
     with tempfile.TemporaryDirectory(prefix='horror-voice-') as directory:
