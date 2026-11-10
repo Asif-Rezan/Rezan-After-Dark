@@ -41,11 +41,13 @@ def fit_text(draw, text, width, max_lines=2, start=36, minimum=23):
     raise ValueError('Subtitle exceeds safe region; split this turn')
 
 
+# Outer limbs and every mouth keyframe have white padding in the artwork.
+# Independent placement leaves additional clearance for the full motion envelope.
+PUPPET_POSITIONS = ((52, 166), (695, 166))
+
+
 def background():
-    im = Image.new('RGB', (1280, 720), 'white')
-    art = Image.open(ASSETS / 'conversation-characters.png').convert('RGB')
-    im.paste(art.resize((1066, 600), Image.Resampling.LANCZOS), (107, 120))
-    return im
+    return CharacterAnimator().frame(0.)
 
 
 def center(draw, text, y, face, color=INK):
@@ -69,7 +71,7 @@ def lesson_frame(bg, lesson, turn, fraction, practice=False):
         center(d, row, 309 + index * 49, face)
     if practice or turn['section'] == 'REPEAT':
         center(d, 'Say it out loud' if practice else 'Listen, then repeat', 430, font(18), MUTED)
-    for name, x in [('Alex', 170), ('Emma', 1110)]:
+    for name, x in [('Alex', 280), ('Emma', 1010)]:
         active = name == turn['speaker'] and not practice
         d.rounded_rectangle((x-60, 646, x+60, 682), radius=18, fill=TEAL if active else '#EEF2F2')
         d.text((x, 653), name, font=font(17), fill='white' if active else MUTED, anchor='mt')
@@ -142,7 +144,7 @@ class CharacterAnimator:
         speaking = Image.open(ASSETS / 'conversation-speaking-mouths.png').convert('RGB').resize((1066,600),Image.Resampling.LANCZOS)
         middle = [speaking.crop((0,0,533,600)),speaking.crop((533,0,1066,600))]
         # Mouth boxes are calibrated to the approved artwork, in puppet pixels.
-        geometry = [(124,143,219,201), (344,171,438,229)]
+        geometry = [(185,137,250,185), (291,157,355,205)]
         self.poses = [[mouth_pose(puppet,pose,box) for pose in (rest,half,puppet)]
                       for puppet,rest,half,box in zip(puppets,closed,middle,geometry)]
 
@@ -157,5 +159,6 @@ class CharacterAnimator:
             angle = .6 * math.sin(phase * .65) + amplitude * .9 * math.sin(seconds * 7)
             bob = 2. * math.sin(phase) + amplitude * 3.2 * math.sin(seconds * 8)
             layer = puppet.rotate(angle, Image.Resampling.BICUBIC, center=(266, 585), fillcolor='white')
-            im.paste(layer.convert('RGB'), (107 + i * 533, 120 + round(bob)))
+            x, y = PUPPET_POSITIONS[i]
+            im.paste(layer.convert('RGB'), (x, y + round(bob)))
         return im

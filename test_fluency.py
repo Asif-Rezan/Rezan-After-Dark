@@ -78,6 +78,20 @@ class FluencyTests(unittest.TestCase):
         self.assertIsNotNone(ImageChops.difference(rest.crop((220,263,330,332)),talking.crop((220,263,330,332))).getbbox())
         self.assertIsNone(ImageChops.difference(rest.crop((640,120,1280,720)),talking.crop((640,120,1280,720))).getbbox())
 
+
+    def test_arms_stay_inside_safe_frame_and_clear_of_subtitle_mask(self):
+        animator=CharacterAnimator()
+        white=Image.new('RGB',(1280,720),'white')
+        for speaker in ('Alex','Emma'):
+            for index in range(36):
+                frame=animator.frame(index/6,speaker,1.)
+                foreground=ImageChops.difference(frame,white).convert('L').point(lambda value:255 if value>40 else 0)
+                bounds=foreground.getbbox()
+                self.assertGreaterEqual(bounds[0],90)
+                self.assertLessEqual(bounds[2],1190)
+                self.assertIsNone(foreground.crop((366,180,914,410)).getbbox(),
+                                  f'Character covered by subtitle mask: {speaker}, frame {index}')
+
     def test_every_sample_caption_fits_safe_region(self):
         bg=background()
         for turn in self.lesson['turns']:
