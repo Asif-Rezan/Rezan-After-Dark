@@ -115,8 +115,9 @@ def speech_energy(path, fps):
     for i in range(0, len(values), step):
         chunk = values[i:i+step]
         rms = math.sqrt(sum(v*v for v in chunk)/max(1,len(chunk))) / 32768
-        out.append(min(1., rms * 12))
-    return out
+        out.append(min(1., rms * 18))
+    # Short smoothing window reduces abrupt jaw chatter between waveform blocks.
+    return [sum(out[max(0,i-1):i+2])/len(out[max(0,i-1):i+2]) for i in range(len(out))]
 
 
 def render(lesson, root, backend='kokoro', sample=False, fps=12):
@@ -167,7 +168,7 @@ def render(lesson, root, backend='kokoro', sample=False, fps=12):
     pending.replace(root/'video.mp4')
     write_json(root/'lesson.json', lesson)
     write_json(root/'validation.json', dict(duration_seconds=actual, format='english-fluency',
-        fps=fps, animated=True, animation='Python Pillow breathing, sway and audio-reactive nods; no lip-sync',
+        fps=fps, animated=True, animation='Python Pillow audio-reactive mouth shapes, breathing, sway and nods; not phoneme lip-sync',
         voices={'Alex': 'am_michael' if backend=='kokoro' else 'en-US-GuyNeural',
                 'Emma': 'af_heart' if backend=='kokoro' else 'en-US-JennyNeural'},
         lesson_hash=digest(lesson), backend=backend, private=True,

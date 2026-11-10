@@ -70,6 +70,14 @@ class FluencyTests(unittest.TestCase):
         b=lesson_frame(b,self.lesson,turn,.5)
         self.assertIsNone(ImageChops.difference(a.crop((400,190,880,409)),b.crop((400,190,880,409))).getbbox())
 
+
+    def test_mouth_changes_only_for_the_current_speaker(self):
+        anim=CharacterAnimator()
+        rest=anim.frame(0,None,0)
+        talking=anim.frame(0,'Alex',1)
+        self.assertIsNotNone(ImageChops.difference(rest.crop((220,263,330,332)),talking.crop((220,263,330,332))).getbbox())
+        self.assertIsNone(ImageChops.difference(rest.crop((640,120,1280,720)),talking.crop((640,120,1280,720))).getbbox())
+
     def test_every_sample_caption_fits_safe_region(self):
         bg=background()
         for turn in self.lesson['turns']:

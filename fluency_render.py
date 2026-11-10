@@ -2,7 +2,7 @@
 from pathlib import Path
 import math
 import hashlib
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 ASSETS = Path(__file__).parent / 'assets' / 'fluency'
 INK, MUTED, TEAL = '#142329', '#68747C', '#287A72'
@@ -116,26 +116,46 @@ def thumbnail(lesson, output, variant_key=None):
     im.convert('RGB').save(output)
 
 
-class CharacterAnimator:
-    """Python/Pillow puppet animation: breathing, sway and audio-reactive nods.
+def mouth_pose(puppet, keyframe, box):
+    """Place a real mouth keyframe within a feathered local face region."""
+    patch = keyframe.crop(box).convert('RGB')
+    width, height = patch.size
+    mask = Image.new('L',patch.size)
+    ImageDraw.Draw(mask).ellipse((3,3,width-3,height-3),fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(3))
+    result = puppet.copy()
+    result.paste(patch,box[:2],mask)
+    return result
 
-    Reuses the approved art, preserving complete hands. No generated per-frame
-    artwork and no lip-sync claim. The two white-background halves have separate
-    pivots and never move the subtitles.
+
+class CharacterAnimator:
+    """Audio-reactive 2D mouth, breathing, sway and nods built with Python/Pillow.
+
+    Mouth openness follows smoothed audio energy, not individual phonemes. The
+    fixed illustrated characters remain recognizable and their hands stay intact.
     """
     def __init__(self):
         art = Image.open(ASSETS / 'conversation-characters.png').convert('RGB').resize((1066, 600), Image.Resampling.LANCZOS)
-        self.puppets = [art.crop((0, 0, 533, 600)).convert('RGBA'), art.crop((533, 0, 1066, 600)).convert('RGBA')]
+        puppets = [art.crop((0, 0, 533, 600)).convert('RGBA'), art.crop((533, 0, 1066, 600)).convert('RGBA')]
+        resting = Image.open(ASSETS / 'conversation-closed-mouths.png').convert('RGB').resize((1066,600),Image.Resampling.LANCZOS)
+        closed = [resting.crop((0,0,533,600)),resting.crop((533,0,1066,600))]
+        speaking = Image.open(ASSETS / 'conversation-speaking-mouths.png').convert('RGB').resize((1066,600),Image.Resampling.LANCZOS)
+        middle = [speaking.crop((0,0,533,600)),speaking.crop((533,0,1066,600))]
+        # Mouth boxes are calibrated to the approved artwork, in puppet pixels.
+        geometry = [(124,143,219,201), (344,171,438,229)]
+        self.poses = [[mouth_pose(puppet,pose,box) for pose in (rest,half,puppet)]
+                      for puppet,rest,half,box in zip(puppets,closed,middle,geometry)]
 
     def frame(self, seconds, speaker=None, energy=0.):
         im = Image.new('RGB', (1280, 720), 'white')
-        for i, puppet in enumerate(self.puppets):
+        for i, poses in enumerate(self.poses):
             phase = seconds * 1.7 + i * 1.5
             active = speaker == ('Alex', 'Emma')[i]
             amplitude = min(1., max(0., energy)) if active else 0.
+            articulation = amplitude * (.72 + .28*math.sin(seconds*23))
+            puppet = poses[round(articulation*2)]
             angle = .6 * math.sin(phase * .65) + amplitude * .9 * math.sin(seconds * 7)
             bob = 2. * math.sin(phase) + amplitude * 3.2 * math.sin(seconds * 8)
-            # Small rotations around the bottom-center give a restrained torso sway.
             layer = puppet.rotate(angle, Image.Resampling.BICUBIC, center=(266, 585), fillcolor='white')
             im.paste(layer.convert('RGB'), (107 + i * 533, 120 + round(bob)))
         return im
