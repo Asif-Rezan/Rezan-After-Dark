@@ -22,13 +22,24 @@ def validate_remote(video, state, channel):
         raise RuntimeError('Channel or metadata mismatch')
     if state.get('format') == 'english-fluency':
         from fluency_lessons import PREFIX
-        if (not snippet.get('tags') or snippet['tags'][0] != PREFIX
-                or snippet.get('categoryId') != '27' or snippet.get('defaultLanguage') != 'en'
-                or snippet.get('defaultAudioLanguage') != 'en' or status.get('license') != 'youtube'
-                or status.get('selfDeclaredMadeForKids') is not False
-                or status.get('embeddable') is not True or status.get('publicStatsViewable') is not True
-                or state.get('captions_uploaded') is not True):
-            raise RuntimeError('English lesson video details or caption verification incomplete')
+        # YouTube may normalize/reorder the returned tags array. The upload
+        # request must put PREFIX first; the server response must retain the
+        # exact tag set (checked above), not an undocumented array ordering.
+        details = {
+            'requested_first_tag': bool(story.get('tags')) and story['tags'][0] == PREFIX,
+            'required_series_tag': PREFIX in snippet.get('tags', []),
+            'education_category': snippet.get('categoryId') == '27',
+            'metadata_language': snippet.get('defaultLanguage') == 'en',
+            'audio_language': snippet.get('defaultAudioLanguage') == 'en',
+            'youtube_license': status.get('license') == 'youtube',
+            'adult_audience': status.get('selfDeclaredMadeForKids') is False,
+            'embedding': status.get('embeddable') is True,
+            'public_statistics': status.get('publicStatsViewable') is True,
+            'english_captions': state.get('captions_uploaded') is True,
+        }
+        failures = [name for name, passed in details.items() if not passed]
+        if failures:
+            raise RuntimeError('English lesson verification incomplete: ' + ', '.join(failures))
     if (status.get('uploadStatus') in ('failed', 'rejected', 'deleted')
         or video.get('processingDetails', {}).get('processingStatus') in ('failed', 'terminated')):
         raise RuntimeError('YouTube upload failed')
@@ -129,7 +140,8 @@ def main(cleanup_media=True):
     if video['status']['privacyStatus'] != 'private':
         raise RuntimeError('Video must remain private; preserve all media')
     state.update(phase='verified_private', verification={'video_id': state['video_id'],
-        'hd': True, 'processed': True, 'metadata': True, 'private': True})
+        'hd': True, 'processed': True, 'metadata': True, 'private': True,
+        'tag_order_normalized': video['snippet'].get('tags', []) != state['story']['tags']})
     store.save(key, state)
     history = store.load('history.json', [])
     if not any(h.get('run') == run for h in history):

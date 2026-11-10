@@ -1,1 +1,3 @@
-Owner requested stop of affected run 42808195140 and diagnosis of failed run 42805069395 on 2026-11-10.
+Recover the already-uploaded private video for daily-42805069395 after correcting API tag-order verification.
+Do not generate or insert another video during this recovery.
+Verify then clean only this run media; the affected run 42808195140 has been cancelled.

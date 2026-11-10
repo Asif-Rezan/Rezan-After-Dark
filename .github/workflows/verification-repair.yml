@@ -1,4 +1,4 @@
-name: Stop affected run and diagnose private upload verification
+name: Recover existing private English upload verification and Drive cleanup
 on:
   push:
     branches: [main]
@@ -6,35 +6,13 @@ on:
 permissions:
   contents: read
 jobs:
-  stop-affected-run:
+  verify-existing:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      actions: write
-    steps:
-      - name: Cancel only the owner-specified affected production run
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          python3 - <<'PY'
-          import os,json,urllib.request,urllib.error
-          target='42808195140'
-          base='https://api.github.com/repos/'+os.environ['GH_REPO']+'/actions/runs/'+target
-          headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'}
-          with urllib.request.urlopen(urllib.request.Request(base,headers=headers)) as response:
-              status=json.load(response)['status']
-          if status!='completed':
-              try:
-                  urllib.request.urlopen(urllib.request.Request(base+'/cancel',headers=headers,method='POST')).close()
-              except urllib.error.HTTPError as error:
-                  if error.code!=409: raise
-          print('Cancellation requested for affected run '+target)
-          PY
-  inspect-upload:
-    needs: stop-affected-run
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 40
+    env:
+      SAVED_RUN_ID: daily-42805069395
+      RUN_SCOPED_CLEANUP: 'true'
+      EXPECTED_CHANNEL_ID: UCwNhdtzL9XZMIAMXm81UCbw
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -43,31 +21,38 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt
-      - name: Inspect only safe verification fields, never credentials or unpublished content
+      - name: Verify existing uploaded video and serving captions without generating or inserting any video
         env:
           DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
           YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
-          EXPECTED_CHANNEL_ID: UCwNhdtzL9XZMIAMXm81UCbw
+        run: python -u fluency_pipeline.py verify
+  cleanup-existing:
+    needs: verify-existing
+    if: ${{ !cancelled() && needs.verify-existing.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      SAVED_RUN_ID: daily-42805069395
+      RUN_SCOPED_CLEANUP: 'true'
+      EXPECTED_CHANNEL_ID: UCwNhdtzL9XZMIAMXm81UCbw
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Recheck private video then clean its tagged Drive media only
+        env:
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
         run: |
+          python -u fluency_pipeline.py cleanup
           python - <<'PY'
-          import json,os
-          from workflow import Store,required
-          from google.oauth2.credentials import Credentials
-          from googleapiclient.discovery import build
-          from fluency_lessons import PREFIX
+          from workflow import Store
           state=Store().load('runs/daily-42805069395/state.json',{})
-          report={k:state.get(k) for k in ('phase','format','captions_uploaded','thumbnail_uploaded')}
-          if state.get('video_id'):
-              client=build('youtube','v3',credentials=Credentials.from_authorized_user_info(json.loads(required('YOUTUBE_TOKEN_JSON'))),cache_discovery=False)
-              items=client.videos().list(part='snippet,status,contentDetails,processingDetails',id=state['video_id']).execute().get('items',[])
-              if items:
-                  video=items[0];snippet=video['snippet'];status=video['status']
-                  report['remote']={k:status.get(k,'ABSENT') for k in ('privacyStatus','uploadStatus','license','embeddable','publicStatsViewable','selfDeclaredMadeForKids','madeForKids')}
-                  report['remote'].update({k:snippet.get(k,'ABSENT') for k in ('categoryId','defaultLanguage','defaultAudioLanguage')})
-                  report['first_tag_matches']=bool(snippet.get('tags')) and snippet['tags'][0]==PREFIX
-                  report['channel_matches']=snippet.get('channelId')==required('EXPECTED_CHANNEL_ID')
-                  report['hd']=video.get('contentDetails',{}).get('definition')=='hd'
-                  report['processed']=video.get('processingDetails',{}).get('processingStatus')=='succeeded'
-          print('::notice title=Verification diagnostic::'+json.dumps(report,sort_keys=True))
+          print('::notice title=Recovered private video::https://www.youtube.com/watch?v='+state['video_id'])
           PY

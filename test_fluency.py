@@ -133,6 +133,22 @@ class FluencyUploadTests(unittest.TestCase):
             bad[field]=['English'] if field=='tags' else 'Ordering Coffee'
             with self.assertRaises(ValueError): validate_lesson(bad)
 
+
+    def test_youtube_reordered_tags_do_not_reject_an_otherwise_valid_upload(self):
+        from daily_publish import validate_remote
+        state={'video_id':'v','story':self.lesson,'format':'english-fluency','captions_uploaded':True}
+        video={'id':'v','snippet':{'channelId':'c','title':self.lesson['title'],'description':self.lesson['description'],
+            'tags':list(reversed(self.lesson['tags'])),'categoryId':'27','defaultLanguage':'en','defaultAudioLanguage':'en'},
+            'status':{'uploadStatus':'processed','privacyStatus':'private','license':'youtube','selfDeclaredMadeForKids':False,
+                'embeddable':True,'publicStatsViewable':True},'processingDetails':{'processingStatus':'succeeded'},
+            'contentDetails':{'definition':'hd'}}
+        self.assertTrue(validate_remote(video,state,'c'))
+        video['snippet']['tags']=video['snippet']['tags'][:-1]
+        with self.assertRaisesRegex(RuntimeError,'metadata'):validate_remote(video,state,'c')
+        video['snippet']['tags']=list(reversed(self.lesson['tags']))
+        state['story']=copy.deepcopy(self.lesson);state['story']['tags']=list(reversed(self.lesson['tags']))
+        with self.assertRaisesRegex(RuntimeError,'requested_first_tag'):validate_remote(video,state,'c')
+
     def test_upload_fields_are_explicit_and_english_education(self):
         from fluency_upload import video_body
         body=video_body(self.lesson,self.lesson['description'],'27')
