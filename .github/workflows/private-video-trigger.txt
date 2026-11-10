@@ -7,3 +7,7 @@ Requested by the owner on 2026-11-10.
 
 Owner requested another full video using the updated 16-worker staged pipeline on 2026-11-10.
 Keep the existing production run; execute this request under the shared concurrency guard.
+
+Restart full 16-worker generation after fixing YouTube tag-order normalization verification.
+Affected run 42808195140 was cancelled; old upload daily-42805069395 was verified and its Drive cleanup completed successfully.
+Owner requested this restart on 2026-11-10.
