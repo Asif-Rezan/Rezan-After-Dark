@@ -7,7 +7,7 @@ from unittest.mock import patch
 import wave
 from PIL import Image, ImageChops
 from fluency_lessons import validate_lesson, generate_lesson
-from fluency_render import CharacterAnimator, background, lesson_frame, thumbnail, ASSETS
+from fluency_render import CharacterAnimator, background, lesson_frame, thumbnail
 from fluency_video import prepare_audio, digest, daily
 
 EXAMPLE = Path(__file__).parent/'examples'/'ordering-coffee.json'
@@ -30,13 +30,29 @@ class FluencyTests(unittest.TestCase):
         def ask(prompt, schema):
             if 'headline' in schema['properties']:
                 return {'angle':'Ordering Coffee Politely','headline':['ORDER','COFFEE','POLITELY']}
+            situation = prompt.split('Situation ')[1].split(' ')[0]
             return {'dialogue':{f'line_{i+1:02}':
-                'Could you please tell me what you would like today?' if i%2==0 else
+                f'Could you please tell me what you would like for order {situation}?' if i%2==0 else
                 'I would like a small coffee with oat milk please.' for i in range(16)}}
         lesson=generate_lesson('2026-11-10',[],ask)
         next_lesson=generate_lesson('2026-11-10',[{'topic_id':lesson['topic_id']}],ask)
         self.assertNotEqual(lesson['topic_id'],next_lesson['topic_id'])
         self.assertEqual({t['section'] for t in lesson['turns']},{'LISTEN','REPEAT','YOUR TURN','FINISH'})
+
+    def test_new_packaging_cannot_reuse_a_previous_conversation(self):
+        from fluency_lessons import dialogue_hash
+
+        line = 'Could you please tell me what you would like today?'
+        fingerprint = dialogue_hash([{'text': line}] * 16)
+        history = [{'dialogue_hashes': [fingerprint]}]
+
+        def ask(prompt, schema):
+            if 'headline' in schema['properties']:
+                return {'angle': 'Ordering Coffee Politely', 'headline': ['ORDER', 'COFFEE', 'POLITELY']}
+            return {'dialogue': {f'line_{i:02}': line.upper() for i in range(1, 17)}}
+
+        with self.assertRaisesRegex(ValueError, 'Generated dialogue failed validation'):
+            generate_lesson('2026-11-10', history, ask)
 
     def test_audio_cache_is_speaker_sensitive_and_repeat_is_reused(self):
         lesson=copy.deepcopy(self.lesson)
@@ -97,15 +113,20 @@ class FluencyTests(unittest.TestCase):
         for turn in self.lesson['turns']:
             self.assertEqual(lesson_frame(bg,self.lesson,turn,.5).size,(1280,720))
 
-    def test_thumbnail_uses_real_alpha_character_with_safe_margins(self):
-        art=Image.open(ASSETS/'emma-thumbnail.png')
-        self.assertIn('A',art.getbands())
-        self.assertEqual(art.getpixel((0,0))[3],0)
+    def test_white_thumbnail_has_two_characters_with_different_expressions(self):
+        from PIL import ImageChops
         with tempfile.TemporaryDirectory() as temp:
-            path=Path(temp)/'thumbnail.png'; thumbnail(self.lesson,path)
-            im=Image.open(path)
-            self.assertEqual(im.size,(1280,720))
-            self.assertEqual(im.getpixel((0,0)),(255,255,0))
+            path = Path(temp) / 'thumbnail.png'
+            thumbnail(dict(self.lesson, thumbnail_variant=0), path)
+            first = Image.open(path).copy()
+            thumbnail(dict(self.lesson, thumbnail_variant=1), path)
+            second = Image.open(path).copy()
+            self.assertEqual(first.size, (1280, 720))
+            self.assertEqual(first.getpixel((0, 0)), (255, 255, 255))
+            for box in [(0, 0, 335, 720), (945, 0, 1280, 720)]:
+                self.assertIsNotNone(ImageChops.difference(first.crop(box), second.crop(box)).getbbox())
+            self.assertIsNone(ImageChops.difference(
+                first.crop((335, 0, 945, 720)), second.crop((335, 0, 945, 720))).getbbox())
 
     def test_ambiguous_upload_never_regenerates_or_reinserts(self):
         class Store:

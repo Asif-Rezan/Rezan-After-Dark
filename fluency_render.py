@@ -1,8 +1,8 @@
-"""Deterministic white lesson layout and stylish yellow thumbnail compositor."""
+"""White lesson and thumbnail layouts for the illustrated English series."""
 from pathlib import Path
 import math
 import hashlib
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageFilter
 
 ASSETS = Path(__file__).parent / 'assets' / 'fluency'
 INK, MUTED, TEAL = '#142329', '#68747C', '#287A72'
@@ -81,41 +81,35 @@ def lesson_frame(bg, lesson, turn, fraction, practice=False):
 
 
 def thumbnail(lesson, output, variant_key=None):
-    """Variable headline using bundled condensed display font, outlines and extrusion.
+    """Place the two illustrated speakers around a centered, topic-specific hook."""
+    im = Image.new('RGB', (1280, 720), 'white')
+    variant = lesson.get('thumbnail_variant')
+    if variant is None:
+        variant = int(hashlib.sha256(str(variant_key or lesson).encode()).hexdigest()[:8], 16)
+    variant %= 9
+    pose_indices = (variant % 3, (variant + variant // 3) % 3)
+    for side, (poses, pose_index) in enumerate(zip(CharacterAnimator().poses, pose_indices)):
+        puppet = poses[pose_index].convert('RGB')
+        white = Image.new('RGB', puppet.size, 'white')
+        bounds = ImageChops.difference(puppet, white).convert('L').point(
+            lambda value: 255 if value > 22 else 0).getbbox()
+        if bounds is None:
+            raise ValueError('Empty thumbnail character asset')
+        puppet = puppet.crop(bounds)
+        scale = min(310 / puppet.width, 565 / puppet.height)
+        puppet = puppet.resize((round(puppet.width * scale), round(puppet.height * scale)),
+                               Image.Resampling.LANCZOS)
+        x = 22 if side == 0 else 1258 - puppet.width
+        im.paste(puppet, (x, im.height - puppet.height))
 
-    Character is a genuine alpha cutout; never crop hands to a rectangular column.
-    """
-    im = Image.new('RGBA', (1280, 720), '#FFFF00')
-    female = Image.open(ASSETS / 'emma-thumbnail.png').convert('RGBA')
-    bounds = female.getchannel('A').point(lambda value: 255 if value > 128 else 0).getbbox()
-    if bounds is None:
-        raise ValueError('Empty thumbnail character asset')
-    female = female.crop(bounds)
-    variant = int(hashlib.sha256(str(variant_key or lesson).encode()).hexdigest()[:8],16)
-    female.thumbnail((490, 654), Image.Resampling.LANCZOS)
-    im.alpha_composite(female, (1280 - female.width - 28, 720 - female.height - 16))
-    # Three cohesive angled lines, black face, white outline, hard black extrusion.
-    stack = Image.new('RGBA', (780, 485))
-    d = ImageDraw.Draw(stack)
-    y = 16
-    for line in lesson['headline']:
-        size = 150
-        while d.textbbox((0, 0), line, font=font(size, True))[2] > 680 and size > 38:
-            size -= 1
-        face = font(size, True)
-        box = d.textbbox((0, 0), line, font=face)
-        h = box[3] - box[1]
-        for shift in range(10, 0, -1):
-            d.text((22+shift, y-box[1]+shift), line, font=face, fill='black', stroke_width=7, stroke_fill='black')
-        d.text((22, y-box[1]), line, font=face, fill='black', stroke_width=6, stroke_fill='white')
-        y += max(130, h + 23)
-    stack = stack.rotate(2 + variant % 3, Image.Resampling.BICUBIC, expand=True)
-    im.alpha_composite(stack, (22, 40))
-    d = ImageDraw.Draw(im)
-    d.polygon([(55, 553), (732, 525), (717, 590), (42, 618)], fill='black')
-    d.text((73, 556), 'LISTEN. REPEAT. SPEAK.', font=font(44, True), fill='#FFFF00')
-    d.text((53, 657), f"REAL-LIFE CONVERSATION • {lesson['level']}", font=font(22, True), fill='black')
-    im.convert('RGB').save(output)
+    draw = ImageDraw.Draw(im)
+    for index, line in enumerate(lesson['headline']):
+        face = font(108, True)
+        while draw.textlength(line, font=face) > 578:
+            face = font(face.size - 1, True)
+        draw.text((640, 236 + index * 116), line, font=face,
+                  fill='#176B61' if index == 1 else INK, anchor='mm')
+    im.save(output)
 
 
 def mouth_pose(puppet, keyframe, box):

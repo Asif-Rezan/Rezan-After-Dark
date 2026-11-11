@@ -1,5 +1,7 @@
 """Original English dialogue lessons, with validated speaker turns and practice pauses."""
 import datetime as dt
+import hashlib
+from itertools import groupby
 import json
 import re
 
@@ -72,6 +74,27 @@ def dialogue_schema():
         'additionalProperties': False}}, 'required': ['dialogue'], 'additionalProperties': False}
 
 
+def normalized_words(text):
+    return ' '.join(re.findall(r"\w+", text.casefold()))
+
+
+def dialogue_hash(turns):
+    lines = [normalized_words(turn['text']) for turn in turns]
+    return hashlib.sha256(json.dumps(lines).encode()).hexdigest()
+
+
+def lesson_dialogue_hashes(lesson):
+    hashes = []
+    for section, turns in groupby(lesson['turns'], key=lambda turn: turn['section']):
+        if section == 'LISTEN':
+            dialogue = list(turns)
+            if dialogue[0]['text'].startswith("Let's practice "):
+                dialogue = dialogue[1:]
+            if dialogue:
+                hashes.append(dialogue_hash(dialogue))
+    return hashes
+
+
 def generate_lesson(day, previous, ask=None):
     """Three different situations within one topic; never pad duration with filler."""
     if ask is None:
@@ -91,8 +114,10 @@ def generate_lesson(day, previous, ask=None):
     packaging_history = [dict(title=item.get('title',''), headline=item.get('headline',[]))
                          for item in previous if item.get('topic_id') == topic_id][-12:]
     packaging_history += [dict(title=item.get('title',''), headline=item.get('headline',[])) for item in previous[-8:]]
-    seen_headlines = {tuple(item.get('headline', [])) for item in previous}
-    seen_titles = {item.get('title') for item in previous}
+    seen_headlines = {normalized_words(' '.join(item.get('headline', []))) for item in previous}
+    seen_titles = {normalized_words(item.get('title', '')) for item in previous}
+    seen_dialogues = {digest for item in previous for digest in item.get('dialogue_hashes', [])}
+    last_variant = max((item.get('thumbnail_variant', -1) for item in previous), default=-1)
     for attempt in range(3):
         package = ask(f'Plan a fresh A2 adult English lesson about {topic}. Return angle: a specific everyday situation, max 48 characters, and headline: exactly three short uppercase thumbnail lines, each at most 18 characters. Make the headline clearly about this situation. Avoid these earlier titles and headlines: {json.dumps(packaging_history)}. Attempt {attempt + 1}: the complete headline and title must be different from earlier videos. No fluency guarantees, no claims about subconscious learning. JSON only.', package_schema)
         angle = package['angle'].strip()
@@ -100,7 +125,7 @@ def generate_lesson(day, previous, ask=None):
         if not 8 <= len(angle) <= 48 or any(ord(c)<32 for c in angle):
             raise ValueError('Invalid lesson angle')
         title = f'{PREFIX} | {angle} | A2 Practice'
-        if tuple(headline) not in seen_headlines and title not in seen_titles:
+        if normalized_words(' '.join(headline)) not in seen_headlines and normalized_words(title) not in seen_titles:
             break
         packaging_history.append(dict(title=title, headline=headline))
     else:
@@ -132,9 +157,11 @@ No fluency guarantees. Return only the requested JSON dialogue.'''
             if valid:
                 dialogue = [dict(speaker='Emma' if i % 2 == 0 else 'Alex', text=lines[key])
                             for i, key in enumerate(keys)]
-                if any('?' in line['text'] for line in dialogue):
+                fingerprint = dialogue_hash(dialogue)
+                if fingerprint not in seen_dialogues and any('?' in line['text'] for line in dialogue):
+                    seen_dialogues.add(fingerprint)
                     break
-            feedback = f' Repair attempt {attempt + 1}: use all 16 line keys, 6–18 words each, and include natural questions ending in a question mark.'
+            feedback = f' Repair attempt {attempt + 1}: use all 16 line keys, 6–18 words each, and include natural questions. Write a new conversation with different lines.'
         else:
             raise ValueError('Generated dialogue failed validation after three attempts')
         summaries.append(dialogue[0]['text'])
@@ -152,6 +179,6 @@ No fluency guarantees. Return only the requested JSON dialogue.'''
     turns.append(dict(speaker='Emma', text='Well done! Try these phrases in your own conversation today.',
                       section='FINISH', pause=1.))
     return validate_lesson(dict(format='english-fluency', level='A2', topic_id=topic_id, topic=topic,
-        title=f'{PREFIX} | {topic} | A2 Practice', headline=headline,
+        title=f'{PREFIX} | {topic} | A2 Practice', headline=headline, thumbnail_variant=last_variant + 1,
         description=f'{PREFIX} | {topic}. Practice {topic.lower()} with Alex and Emma. Listen to three original conversations, repeat each sentence, and answer aloud during role play. A2 English listening and speaking practice with on-screen subtitles.',
         tags=[PREFIX, 'English conversation', 'English speaking practice', 'shadowing practice', 'A2 English', topic], turns=turns))

@@ -1,6 +1,6 @@
 # English fluency conversation videos
 
-Creates original A2 English lessons with Alex (male) and Emma (female): a white background, two 3D storybook characters, centered timed subtitles, listen/repeat/role-play sections, Python character animation, and a separately rendered yellow thumbnail for every video. Existing Google credentials and expected channel identity stay isolated to this repository.
+Creates original A2 English lessons with Alex (male) and Emma (female): a white background, two 3D storybook characters, centered timed subtitles, listen/repeat/role-play sections, Python character animation, and a separately rendered white thumbnail for every video. Existing Google credentials and expected channel identity stay isolated to this repository.
 
 ## Video and thumbnail format
 
@@ -9,7 +9,7 @@ Creates original A2 English lessons with Alex (male) and Emma (female): a white 
 - Python/Pillow character breathing, torso sway, speech-energy-driven nods and three mouth poses (closed, slightly open, open). Characters move independently; subtitles stay fixed. This is 2D puppet animation of 3D-style artwork, approximate audio-reactive mouth animation rather than phoneme-accurate lip-sync or a rigged 3D model.
 - Kokoro CPU voices: Alex `am_michael`, Emma `af_heart`, speed `0.9`, neutral pitch. No horror pitch filter, atmosphere or background music.
 - Daily lessons contain three original conversations, sentence repetition with speaking pauses and role play. Measured audio must be 8–20 minutes; generation stops outside that range rather than padding the lesson. The checked-in short sample uses a separate 60–90 second duration gate.
-- Qwen generates a fresh specific situation and three thumbnail headline lines, avoiding recent topics/titles. Previously used complete titles and thumbnail headlines in the saved English history are rejected, with at most three generation attempts. Every lesson renders its own `thumbnail.jpg` with black condensed display text, white outline, hard shadow and a slightly varied angle over exact `#FFFF00` yellow. The same approved female identity remains recognizable; the complete alpha cutout keeps hands inside the frame.
+- Qwen generates a fresh situation and three thumbnail headline lines. New runs reserve the title, headline and dialogue fingerprints before rendering so later runs can reject repeats. Each thumbnail places Alex and Emma on opposite sides of a white canvas, with the topic hook centered. Both characters change expression between consecutive new episodes.
 
 ## Title and upload details
 

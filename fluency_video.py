@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import wave
 
-from fluency_lessons import generate_lesson, validate_lesson
+from fluency_lessons import generate_lesson, lesson_dialogue_hashes, validate_lesson
 from fluency_render import CharacterAnimator, lesson_frame, thumbnail
 
 BASE = Path(__file__).resolve().parent
@@ -238,6 +238,7 @@ def daily(root, resume_upload=False):
         store.save(f'runs/{run_id}/lesson.json', lesson)
     else:
         lesson = validate_lesson(saved)
+    record_history(store, run_id, lesson)
     if resume_upload:
         for name in ('video.mp4', 'thumbnail.jpg', 'captions.srt', 'validation.json'):
             fid = store.find(f'runs/{run_id}/{name}')
@@ -266,9 +267,19 @@ def daily(root, resume_upload=False):
 
 def record_history(store, run_id, lesson):
     history = store.load('fluency-history.json', [])
-    if not any(entry.get('run') == run_id for entry in history):
-        history.append(dict(run=run_id, topic_id=lesson['topic_id'], title=lesson['title'], headline=lesson['headline'], hash=digest(lesson)))
-        store.save('fluency-history.json', history)
+    entry = dict(run=run_id, topic_id=lesson['topic_id'], title=lesson['title'],
+                 headline=lesson['headline'], hash=digest(lesson),
+                 dialogue_hashes=lesson_dialogue_hashes(lesson))
+    if 'thumbnail_variant' in lesson:
+        entry['thumbnail_variant'] = lesson['thumbnail_variant']
+    for index, saved in enumerate(history):
+        if saved.get('run') == run_id:
+            if saved != entry:
+                history[index] = entry
+                store.save('fluency-history.json', history)
+            return
+    history.append(entry)
+    store.save('fluency-history.json', history)
 
 
 def main():

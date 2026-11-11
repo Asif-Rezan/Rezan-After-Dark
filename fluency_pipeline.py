@@ -137,6 +137,7 @@ def upload_only(store,run_id,root):
         if not isinstance(sha,str):
             raise RuntimeError('Completed media manifest is incomplete')
         download(store,run_id,root,name,sha)
+    record_history(store, run_id, lesson)
     state=dict(phase='prepared',story=lesson,hash=digest(lesson),format='english-fluency')
     store.save(key,state)
     upload_private(root/'video.mp4',root/'thumbnail.jpg',lesson,state,store,key,
@@ -177,6 +178,7 @@ def execute(stage,root,speaker=None,part=None):
             saved=generate_lesson(dt.datetime.now(ZoneInfo('Asia/Dhaka')).date().isoformat(),store.load('fluency-history.json',[]))
             store.save(prefix+'lesson.json',saved)
         validate_lesson(saved)
+        record_history(store,run_id,saved)
         print(json.dumps({'stage':'prepare','lesson_saved':True,'run':run_id}));return
     lesson=load_lesson(store,run_id)
     if stage=='voice':
