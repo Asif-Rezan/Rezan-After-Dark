@@ -11,23 +11,27 @@ def disposable(name):
         re.fullmatch(r'(?:shot-\d+\.(?:png|mp4|qa\.json)|speech-[a-f0-9]{64}\.wav|render-0(?:0[0-9]|1[0-5])\.mp4)', name))
 
 
+class TagMismatch(RuntimeError):
+    pass
+
+
 def validate_remote(video, state, channel):
     if video.get('id') != state.get('video_id'):
         raise RuntimeError('Video identity mismatch')
     snippet, status = video['snippet'], video['status']
     story = state['story']
-    if (snippet['channelId'] != channel or snippet['title'] != story['title']
-        or set(snippet.get('tags', [])) != set(story['tags'])
-        or snippet['description'] != state.get('upload_description', story['description'])):
-        raise RuntimeError('Channel or metadata mismatch')
+    metadata = {
+        'channel': snippet.get('channelId') == channel,
+        'title': snippet.get('title') == story['title'],
+        'description': snippet.get('description') == state.get('upload_description', story['description']),
+    }
+    mismatches = [field for field, matches in metadata.items() if not matches]
+    if mismatches:
+        raise RuntimeError('YouTube metadata mismatch: ' + ', '.join(mismatches))
     if state.get('format') == 'english-fluency':
         from fluency_lessons import PREFIX
-        # YouTube may normalize/reorder the returned tags array. The upload
-        # request must put PREFIX first; the server response must retain the
-        # exact tag set (checked above), not an undocumented array ordering.
         details = {
             'requested_first_tag': bool(story.get('tags')) and story['tags'][0] == PREFIX,
-            'required_series_tag': PREFIX in snippet.get('tags', []),
             'education_category': snippet.get('categoryId') == '27',
             'metadata_language': snippet.get('defaultLanguage') == 'en',
             'audio_language': snippet.get('defaultAudioLanguage') == 'en',
@@ -43,9 +47,23 @@ def validate_remote(video, state, channel):
     if (status.get('uploadStatus') in ('failed', 'rejected', 'deleted')
         or video.get('processingDetails', {}).get('processingStatus') in ('failed', 'terminated')):
         raise RuntimeError('YouTube upload failed')
+    # YouTube can reorder tags. Membership must still match the upload request.
+    if set(snippet.get('tags', [])) != set(story['tags']):
+        raise TagMismatch('YouTube metadata mismatch: tags')
     return (status.get('uploadStatus') == 'processed'
         and video.get('processingDetails', {}).get('processingStatus') == 'succeeded'
         and video.get('contentDetails', {}).get('definition') == 'hd')
+
+
+def restore_tags(client, video, tags):
+    snippet = video['snippet']
+    # Updating the snippet replaces its writable properties, so retain the
+    # verified values and send only the snippet part to preserve video status.
+    fields = ('title', 'description', 'categoryId', 'defaultLanguage', 'defaultAudioLanguage')
+    body = {'id': video['id'], 'snippet': {field: snippet[field] for field in fields}}
+    body['snippet']['tags'] = tags
+    client.videos().update(part='snippet', body=body).execute()
+    print('Restored the expected YouTube tags. Checking readback.', flush=True)
 
 
 def cleanup(store, run, state):
@@ -125,20 +143,33 @@ def main(cleanup_media=True):
         raise RuntimeError('Thumbnail upload unconfirmed; preserve all media')
     client = build('youtube', 'v3', credentials=Credentials.from_authorized_user_info(
         json.loads(required('YOUTUBE_TOKEN_JSON'))), cache_discovery=False)
+    channel = required('EXPECTED_CHANNEL_ID')
     deadline = time.monotonic() + 1800
+    tag_checks_remaining = None
     while True:
         items = client.videos().list(part='snippet,status,processingDetails,contentDetails',
             id=state['video_id']).execute().get('items', [])
         if not items:
             raise RuntimeError('Uploaded video unavailable')
         video = items[0]
-        if validate_remote(video, state, required('EXPECTED_CHANNEL_ID')):
-            break
+        if video['status']['privacyStatus'] != 'private':
+            raise RuntimeError('Video must remain private; preserve all media')
+        try:
+            if validate_remote(video, state, channel):
+                break
+        except TagMismatch:
+            if cleanup_media or state.get('format') != 'english-fluency':
+                raise
+            if tag_checks_remaining is None:
+                restore_tags(client, video, state['story']['tags'])
+                tag_checks_remaining = 3
+                continue
+            tag_checks_remaining -= 1
+            if tag_checks_remaining == 0:
+                raise TagMismatch('YouTube metadata mismatch: tags still differ after restoration')
         if time.monotonic() >= deadline:
             raise RuntimeError('HD processing pending; preserve all media')
         time.sleep(20)
-    if video['status']['privacyStatus'] != 'private':
-        raise RuntimeError('Video must remain private; preserve all media')
     state.update(phase='verified_private', verification={'video_id': state['video_id'],
         'hd': True, 'processed': True, 'metadata': True, 'private': True,
         'tag_order_normalized': video['snippet'].get('tags', []) != state['story']['tags']})

@@ -1,1 +1,1 @@
-Compare saved and returned metadata for daily-42919118406.
+Recover the existing private upload for daily-42919118406 by restoring and verifying its intended tags.

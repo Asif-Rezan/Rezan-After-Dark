@@ -1,10 +1,13 @@
-name: Diagnose existing private English upload metadata
+name: Recover existing private English upload verification and Drive cleanup
 on:
   push:
     branches: [main]
     paths: ['.github/verification-repair-request.txt']
 permissions:
   contents: read
+concurrency:
+  group: youtube-daily-rezan-after-dark
+  cancel-in-progress: false
 jobs:
   verify-existing:
     runs-on: ubuntu-24.04
@@ -21,50 +24,38 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt
-      - name: Compare saved metadata with the existing private upload
+      - name: Verify existing uploaded video and serving captions without generating or inserting any video
+        env:
+          DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+        run: python -u fluency_pipeline.py verify
+  cleanup-existing:
+    needs: verify-existing
+    if: ${{ !cancelled() && needs.verify-existing.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      SAVED_RUN_ID: daily-42919118406
+      RUN_SCOPED_CLEANUP: 'true'
+      EXPECTED_CHANNEL_ID: UCwNhdtzL9XZMIAMXm81UCbw
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Recheck private video then clean its tagged Drive media only
         env:
           DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
           YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
         run: |
-          python - <<'PYTHON'
-          import json
-          import unicodedata
-          from google.oauth2.credentials import Credentials
-          from googleapiclient.discovery import build
-          from workflow import Store, required
-
-          state = Store().load(f"runs/{required('SAVED_RUN_ID')}/state.json", {})
-          client = build('youtube', 'v3', credentials=Credentials.from_authorized_user_info(
-              json.loads(required('YOUTUBE_TOKEN_JSON'))), cache_discovery=False)
-          video = client.videos().list(part='snippet,status', id=state['video_id']).execute()['items'][0]
-          snippet = video['snippet']
-          story = state['story']
-          checks = {
-              'channel': snippet['channelId'] == required('EXPECTED_CHANNEL_ID'),
-              'private': video['status']['privacyStatus'] == 'private',
-          }
-          for field, expected in [('title', story['title']),
-                                  ('description', state.get('upload_description', story['description']))]:
-              actual = snippet[field]
-              checks[field] = {
-                  'exact': actual == expected,
-                  'lengths': [len(actual), len(expected)],
-                  'trimmed': actual.strip() == expected.strip(),
-                  'whitespace': actual.split() == expected.split(),
-                  'normalized': unicodedata.normalize('NFC', actual) == unicodedata.normalize('NFC', expected),
-                  'story_only': actual == story[field],
-                  'contains_story': story[field] in actual,
-              }
-          actual, expected = snippet.get('tags', []), story['tags']
-          checks['tags'] = {
-              'counts': [len(actual), len(expected)],
-              'exact_set': set(actual) == set(expected),
-              'normalized_set': {tag.strip().casefold() for tag in actual} == {tag.strip().casefold() for tag in expected},
-              'matches_expected_positions': [i for i, tag in enumerate(expected) if tag in actual],
-              'normalized_expected_positions': [i for i, tag in enumerate(expected)
-                                                if tag.strip().casefold() in {t.strip().casefold() for t in actual}],
-              'unexpected_tag_lengths': [len(tag) for tag in actual if tag not in expected],
-          }
-          print('::notice title=Metadata comparison::' + json.dumps(checks, sort_keys=True))
-          PYTHON
+          python -u fluency_pipeline.py cleanup
+          python - <<'PY'
+          from workflow import Store
+          state=Store().load('runs/daily-42919118406/state.json',{})
+          print('::notice title=Recovered private video::https://www.youtube.com/watch?v='+state['video_id'])
+          PY

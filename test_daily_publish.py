@@ -1,4 +1,5 @@
 import hashlib
+from copy import deepcopy
 import unittest
 from unittest.mock import MagicMock
 from daily_publish import cleanup, disposable, validate_remote
@@ -130,7 +131,7 @@ class RecoveryTests(unittest.TestCase):
             self.assertNotIn('disposable', body['appProperties'])
 
 class PrivateVisibilityTests(unittest.TestCase):
-    def run_private_verification(self, privacy):
+    def run_private_verification(self, privacy, *, repair_tags=False, repair_succeeds=True):
         import daily_publish
         from unittest.mock import patch
         state = {'phase': 'complete', 'video_id': 'v', 'thumbnail_uploaded': True,
@@ -141,13 +142,40 @@ class PrivateVisibilityTests(unittest.TestCase):
         store, client = MagicMock(), MagicMock()
         store.load.side_effect = [state, []]
         client.videos().list().execute.return_value = {'items': [video]}
+        if repair_tags:
+            from fluency_lessons import PREFIX
+            state.update(format='english-fluency', captions_uploaded=True)
+            state['story']['tags'] = [PREFIX, 'English practice']
+            video['snippet'].update(tags=['unrelated tag'], categoryId='27',
+                                    defaultLanguage='en', defaultAudioLanguage='en')
+            video['status'].update(license='youtube', selfDeclaredMadeForKids=False,
+                                   embeddable=True, publicStatsViewable=True)
+            restored = deepcopy(video)
+            restored['snippet']['tags'] = list(reversed(state['story']['tags']))
+            client.videos().list().execute.side_effect = (
+                [{'items': [video]}, {'items': [restored]}] if repair_succeeds
+                else [{'items': [video]}] * 4)
         env = {'SAVED_RUN_ID': 'daily-123', 'YOUTUBE_TOKEN_JSON': '{}', 'EXPECTED_CHANNEL_ID': 'c'}
         with patch.dict('os.environ', env), patch('workflow.Store', return_value=store), \
              patch.dict('sys.modules', {
                  'google.oauth2.credentials': MagicMock(),
                  'googleapiclient.discovery': MagicMock(build=MagicMock(return_value=client))}), \
-             patch('daily_publish.cleanup') as clean:
-            if privacy == 'private':
+             patch('daily_publish.cleanup') as clean, patch('daily_publish.time.sleep'):
+            if repair_tags and privacy == 'private':
+                if repair_succeeds:
+                    daily_publish.main(cleanup_media=False)
+                    self.assertEqual(state['phase'], 'verified_private')
+                else:
+                    with self.assertRaisesRegex(daily_publish.TagMismatch, 'after restoration'):
+                        daily_publish.main(cleanup_media=False)
+                    store.save.assert_not_called()
+                expected_snippet = {field: value for field, value in restored['snippet'].items()
+                                    if field != 'channelId'}
+                expected_snippet['tags'] = state['story']['tags']
+                client.videos().update.assert_called_once_with(
+                    part='snippet', body={'id': 'v', 'snippet': expected_snippet})
+                clean.assert_not_called()
+            elif privacy == 'private':
                 daily_publish.main()
                 self.assertEqual(state['phase'], 'verified_private')
                 clean.assert_called_once_with(store, 'daily-123', state)
@@ -155,7 +183,8 @@ class PrivateVisibilityTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, 'remain private'):
                     daily_publish.main()
                 clean.assert_not_called()
-            client.videos().update.assert_not_called()
+            if not repair_tags or privacy != 'private':
+                client.videos().update.assert_not_called()
             client.videos().insert.assert_not_called()
 
     def test_verified_private_upload_never_changes_visibility_or_reuploads(self):
@@ -164,3 +193,12 @@ class PrivateVisibilityTests(unittest.TestCase):
     def test_public_or_unlisted_video_preserves_media(self):
         for privacy in ('public', 'unlisted'):
             self.run_private_verification(privacy)
+
+    def test_private_english_upload_restores_replaced_tags_and_verifies_readback(self):
+        self.run_private_verification('private', repair_tags=True)
+
+    def test_failed_tag_restoration_preserves_media_without_repeated_updates(self):
+        self.run_private_verification('private', repair_tags=True, repair_succeeds=False)
+
+    def test_tag_mismatch_cannot_modify_a_public_video(self):
+        self.run_private_verification('public', repair_tags=True)
