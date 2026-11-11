@@ -9,7 +9,7 @@ Creates original A2 English lessons with Alex (male) and Emma (female): a white 
 - Python/Pillow character breathing, torso sway, speech-energy-driven nods and three mouth poses (closed, slightly open, open). Characters move independently; subtitles stay fixed. This is 2D puppet animation of 3D-style artwork, approximate audio-reactive mouth animation rather than phoneme-accurate lip-sync or a rigged 3D model.
 - Kokoro CPU voices: Alex `am_michael`, Emma `af_heart`, speed `0.9`, neutral pitch. No horror pitch filter, atmosphere or background music.
 - Daily lessons contain three original conversations, sentence repetition with speaking pauses and role play. Measured audio must be 8–20 minutes; generation stops outside that range rather than padding the lesson. The checked-in short sample uses a separate 60–90 second duration gate.
-- Qwen generates a fresh situation and three thumbnail headline lines. New runs reserve the title, headline and dialogue fingerprints before rendering so later runs can reject repeats. Each thumbnail places Alex and Emma on opposite sides of a white canvas, with the topic hook centered. Both characters change expression between consecutive new episodes.
+- Qwen generates a fresh situation and three thumbnail headline lines. New runs reserve the title, headline and dialogue fingerprints before rendering so later runs can reject repeats. Each thumbnail places Alex and Emma on opposite sides of a white canvas, with the topic hook centered. Both characters change their expression and pose between consecutive new episodes, rotating through 16 pairings.
 
 ## Title and upload details
 
