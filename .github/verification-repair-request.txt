@@ -1,1 +1,1 @@
-Recover the existing private upload for daily-42919118406 by restoring and verifying its intended tags.
+Recheck tag verification for the existing private upload daily-42919118406 and retain media if YouTube still reports different tags.

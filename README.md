@@ -13,7 +13,7 @@ Creates original A2 English lessons with Alex (male) and Emma (female): a white 
 
 ## Title and upload details
 
-The title and description start with `Learn English While You Sleep | …`, and the first tag in the upload request is exactly `Learn English While You Sleep`. YouTube can reorder the tags returned by its API; verification checks the exact tag set and the original request order, rather than rejecting a successful upload solely because the response array was normalized. This is the series label; the script describes actual listening, repetition and speaking practice without promising learning during sleep.
+The title and description start with `Learn English While You Sleep | …`, and the first tag in the upload request is exactly `Learn English While You Sleep`. YouTube can reorder the tags returned by its API; verification checks the exact tag set and the original request order, rather than rejecting a successful upload solely because the response array was normalized. If the tag set differs, verification attempts one metadata update on the existing private video. If YouTube still returns different tags, the workflow reports verification pending and retains the Drive media. Check the tags in YouTube Studio and retry with `cleanup_run` for the original run. This is the series label; the script describes actual listening, repetition and speaking practice without promising learning during sleep.
 
 Example title: **Learn English While You Sleep | Ordering Coffee | A2 Practice**.
 

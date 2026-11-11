@@ -153,7 +153,12 @@ def execute(stage,root,speaker=None,part=None):
             from fluency_upload import ensure_captions
             ensure_captions(store,prefix+'state.json',current,root)
         from daily_publish import main
-        main(cleanup_media=stage=='cleanup')
+        verified = main(cleanup_media=stage=='cleanup')
+        if stage=='verify':
+            output = os.getenv('GITHUB_OUTPUT')
+            if output:
+                with Path(output).open('a') as stream:
+                    stream.write(f'verified={str(verified).lower()}\n')
         if stage=='cleanup':
             state=store.load(prefix+'state.json',{})
             if state.get('format')=='english-fluency':

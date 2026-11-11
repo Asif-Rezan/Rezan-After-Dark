@@ -249,6 +249,8 @@ jobs:
     if: ${{ !cancelled() && !inputs.cleanup_run && (needs.assemble.result == 'success' || inputs.resume_run != '') }}
   verify:
     name: Verify HD, metadata, thumbnail and captions
+    outputs:
+      verified: ${{ steps.verify-upload.outputs.verified }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
@@ -269,6 +271,7 @@ jobs:
         sudo apt-get install -y ffmpeg
         pip install -r requirements.txt
     - name: Verify HD, metadata, thumbnail and captions
+      id: verify-upload
       run: python -u fluency_pipeline.py verify
       env: *id001
     needs: upload
@@ -298,4 +301,4 @@ jobs:
       run: python -u fluency_pipeline.py cleanup
       env: *id001
     needs: verify
-    if: ${{ !cancelled() && needs.verify.result == 'success' }}
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.verify.outputs.verified == 'true' }}

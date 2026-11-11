@@ -150,6 +150,8 @@ class PrivateVisibilityTests(unittest.TestCase):
                                     defaultLanguage='en', defaultAudioLanguage='en')
             video['status'].update(license='youtube', selfDeclaredMadeForKids=False,
                                    embeddable=True, publicStatsViewable=True)
+            client.videos().update().execute.return_value = {'snippet': video['snippet']}
+            client.videos().update.reset_mock()
             restored = deepcopy(video)
             restored['snippet']['tags'] = list(reversed(state['story']['tags']))
             client.videos().list().execute.side_effect = (
@@ -163,11 +165,10 @@ class PrivateVisibilityTests(unittest.TestCase):
              patch('daily_publish.cleanup') as clean, patch('daily_publish.time.sleep'):
             if repair_tags and privacy == 'private':
                 if repair_succeeds:
-                    daily_publish.main(cleanup_media=False)
+                    self.assertTrue(daily_publish.main(cleanup_media=False))
                     self.assertEqual(state['phase'], 'verified_private')
                 else:
-                    with self.assertRaisesRegex(daily_publish.TagMismatch, 'after restoration'):
-                        daily_publish.main(cleanup_media=False)
+                    self.assertFalse(daily_publish.main(cleanup_media=False))
                     store.save.assert_not_called()
                 expected_snippet = {field: value for field, value in restored['snippet'].items()
                                     if field != 'channelId'}
@@ -181,7 +182,7 @@ class PrivateVisibilityTests(unittest.TestCase):
                 clean.assert_called_once_with(store, 'daily-123', state)
             else:
                 with self.assertRaisesRegex(RuntimeError, 'remain private'):
-                    daily_publish.main()
+                    daily_publish.main(cleanup_media=not repair_tags)
                 clean.assert_not_called()
             if not repair_tags or privacy != 'private':
                 client.videos().update.assert_not_called()

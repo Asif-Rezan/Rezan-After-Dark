@@ -47,12 +47,13 @@ def validate_remote(video, state, channel):
     if (status.get('uploadStatus') in ('failed', 'rejected', 'deleted')
         or video.get('processingDetails', {}).get('processingStatus') in ('failed', 'terminated')):
         raise RuntimeError('YouTube upload failed')
-    # YouTube can reorder tags. Membership must still match the upload request.
-    if set(snippet.get('tags', [])) != set(story['tags']):
-        raise TagMismatch('YouTube metadata mismatch: tags')
-    return (status.get('uploadStatus') == 'processed'
+    ready = (status.get('uploadStatus') == 'processed'
         and video.get('processingDetails', {}).get('processingStatus') == 'succeeded'
         and video.get('contentDetails', {}).get('definition') == 'hd')
+    # YouTube can reorder tags. Membership must still match the upload request.
+    if ready and set(snippet.get('tags', [])) != set(story['tags']):
+        raise TagMismatch('YouTube metadata mismatch: tags')
+    return ready
 
 
 def restore_tags(client, video, tags):
@@ -62,8 +63,11 @@ def restore_tags(client, video, tags):
     fields = ('title', 'description', 'categoryId', 'defaultLanguage', 'defaultAudioLanguage')
     body = {'id': video['id'], 'snippet': {field: snippet[field] for field in fields}}
     body['snippet']['tags'] = tags
-    client.videos().update(part='snippet', body=body).execute()
-    print('Restored the expected YouTube tags. Checking readback.', flush=True)
+    response = client.videos().update(part='snippet', body=body).execute()
+    returned_tags = response.get('snippet', {}).get('tags', [])
+    print(json.dumps({'check': 'YouTube tag update', 'expected_count': len(tags),
+                      'response_count': len(returned_tags),
+                      'response_matches': set(returned_tags) == set(tags)}), flush=True)
 
 
 def cleanup(store, run, state):
@@ -165,8 +169,12 @@ def main(cleanup_media=True):
                 tag_checks_remaining = 3
                 continue
             tag_checks_remaining -= 1
-            if tag_checks_remaining == 0:
-                raise TagMismatch('YouTube metadata mismatch: tags still differ after restoration')
+            if tag_checks_remaining == 0 or time.monotonic() >= deadline:
+                print(f'::warning title=YouTube tag verification pending::'
+                      f'{run}: YouTube still returns different tags after the update. '
+                      f'Drive media retained. Check the tags in YouTube Studio and retry with cleanup_run={run}.',
+                      flush=True)
+                return False
         if time.monotonic() >= deadline:
             raise RuntimeError('HD processing pending; preserve all media')
         time.sleep(20)
@@ -181,6 +189,7 @@ def main(cleanup_media=True):
     if cleanup_media:
         cleanup(store, run, state)
     print(json.dumps({'run': run, 'video_id': state['video_id'], 'privacy': 'private', 'verified': True, 'cleanup_complete': cleanup_media}))
+    return True
 
 
 if __name__ == '__main__':

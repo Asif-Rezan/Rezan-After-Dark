@@ -10,6 +10,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   verify-existing:
+    outputs:
+      verified: ${{ steps.verify-upload.outputs.verified }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
@@ -25,6 +27,7 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt
       - name: Verify existing uploaded video and serving captions without generating or inserting any video
+        id: verify-upload
         env:
           DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
@@ -32,7 +35,7 @@ jobs:
         run: python -u fluency_pipeline.py verify
   cleanup-existing:
     needs: verify-existing
-    if: ${{ !cancelled() && needs.verify-existing.result == 'success' }}
+    if: ${{ !cancelled() && needs.verify-existing.result == 'success' && needs.verify-existing.outputs.verified == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
