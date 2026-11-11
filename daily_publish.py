@@ -168,8 +168,12 @@ def verify_run(store, client, run, channel, *, repair_tags=False, wait=True):
             raise RuntimeError('HD processing pending; preserve all media')
         time.sleep(20)
     if not wait and state.get('format') == 'english-fluency':
-        captions = client.captions().list(part='snippet', videoId=state['video_id']).execute().get('items', [])
-        if not any(track['id'] == state.get('caption_id')
+        caption_id = state.get('caption_id')
+        if not caption_id:
+            raise RuntimeError('Saved English caption ID is missing')
+        captions = client.captions().list(
+            part='snippet', videoId=state['video_id'], id=caption_id).execute().get('items', [])
+        if not any(track['id'] == caption_id
                    and track['snippet'].get('language') == 'en'
                    and track['snippet'].get('status') == 'serving'
                    and not track['snippet'].get('isDraft') for track in captions):
@@ -210,8 +214,8 @@ def cleanup_previous_runs(store, client, current_run, channel):
         try:
             state = verify_run(store, client, run, channel, wait=False)
         except (RuntimeError, HttpError) as error:
-            print(f'::warning title=Previous Drive media retained::{run}: '
-                  f'Upload could not be verified ({type(error).__name__}).', flush=True)
+            reason = f'YouTube HTTP {error.resp.status}' if isinstance(error, HttpError) else str(error)
+            print(f'::warning title=Previous Drive media retained::{run}: {reason}', flush=True)
             retained += 1
             continue
         cleanup(store, run, state)

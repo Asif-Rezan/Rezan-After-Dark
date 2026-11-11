@@ -1,1 +1,1 @@
-Verify daily-42964747148 and clean tagged temporary media for it and older verifiable daily uploads.
+Recheck older daily runs with their saved caption IDs, and report why any media is retained. Current run: daily-42964747148.
