@@ -96,16 +96,16 @@ def thumbnail(lesson, output, variant_key=None):
         if bounds is None:
             raise ValueError('Empty thumbnail character asset')
         puppet = puppet.crop(bounds)
-        scale = min(310 / puppet.width, 565 / puppet.height)
+        scale = min(385 / puppet.width, 680 / puppet.height)
         puppet = puppet.resize((round(puppet.width * scale), round(puppet.height * scale)),
                                Image.Resampling.LANCZOS)
-        x = 22 if side == 0 else 1258 - puppet.width
+        x = 12 if side == 0 else im.width - 12 - puppet.width
         im.paste(puppet, (x, im.height - puppet.height))
 
     draw = ImageDraw.Draw(im)
     for index, line in enumerate(lesson['headline']):
         face = font(108, True)
-        while draw.textlength(line, font=face) > 578:
+        while draw.textlength(line, font=face) > 460:
             face = font(face.size - 1, True)
         draw.text((640, 236 + index * 116), line, font=face,
                   fill='#176B61' if index == 1 else INK, anchor='mm')
