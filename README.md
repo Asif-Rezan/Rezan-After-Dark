@@ -51,7 +51,7 @@ A fresh run saves the validated lesson privately before rendering, then saves co
 
 - Fresh dispatch: leave both inputs blank.
 - `resume_run= daily-<original GitHub run ID>`: restore and verify completed media, then upload only. A missing asset stops recovery; it never silently regenerates in this mode. If the video already exists, reconcile thumbnail/caption completion and run verification instead of inserting again.
-- `cleanup_run= daily-<original GitHub run ID>`: verify an already completed upload and resume the existing tagged cleanup only. If captions are still incomplete, use `resume_run` instead.
+- `cleanup_run= daily-<original GitHub run ID>`: verify an already completed upload and resume tagged Drive cleanup. The cleanup stage also checks older daily runs with tagged temporary media and cleans those whose existing uploads pass verification. If captions are still incomplete, use `resume_run` instead.
 - An ambiguous `upload_started` state blocks a second video insertion. An ambiguous caption insertion is reconciled by listing the fixed English track name before considering another insertion.
 - Saved audio and captions use exact measured timings. Video, thumbnail and SRT SHA-256 values are checked during upload-only restoration.
 - Parallel voice and render jobs write separate private Drive files and manifests; no plaintext media is exposed through GitHub artifacts. Manifests bind speaker/chunks to the lesson, timing, frame rate, exact frame ranges and SHA-256 hashes. Missing or foreign assets stop assembly/upload. Disposable voice WAVs and all sixteen render chunks are included in verified cleanup.

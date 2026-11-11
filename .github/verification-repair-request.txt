@@ -1,1 +1,1 @@
-Verify and clean tagged temporary Drive media for daily-42964747148.
+Verify daily-42964747148 and clean tagged temporary media for it and older verifiable daily uploads.

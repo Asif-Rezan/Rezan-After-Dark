@@ -129,24 +129,15 @@ def cleanup(store, run, state):
           flush=True)
 
 
-def main(cleanup_media=True):
-    from google.oauth2.credentials import Credentials
-    from googleapiclient.discovery import build
+def verify_run(store, client, run, channel, *, repair_tags=False, wait=True):
     from googleapiclient.errors import HttpError
-    from workflow import Store, required
-    run = required('SAVED_RUN_ID')
-    if not re.fullmatch(r'daily-\d+', run):
-        raise ValueError('Only daily run IDs are accepted')
-    store = Store()
+
     key = f'runs/{run}/state.json'
     state = store.load(key, {})
     if state.get('phase') not in ('uploaded', 'complete', 'verified_private') or not state.get('video_id'):
         raise RuntimeError('No successful upload to verify; no cleanup allowed')
     if state.get('thumbnail_uploaded') is not True:
         raise RuntimeError('Thumbnail upload unconfirmed; preserve all media')
-    client = build('youtube', 'v3', credentials=Credentials.from_authorized_user_info(
-        json.loads(required('YOUTUBE_TOKEN_JSON'))), cache_discovery=False)
-    channel = required('EXPECTED_CHANNEL_ID')
     deadline = time.monotonic() + 1800
     tag_update_attempted = False
     while True:
@@ -161,7 +152,7 @@ def main(cleanup_media=True):
             returned_tags = video['snippet'].get('tags', [])
             expected_tags = state['story']['tags']
             tags_match = set(returned_tags) == set(expected_tags)
-            if not tags_match and not cleanup_media and not tag_update_attempted:
+            if not tags_match and repair_tags and not tag_update_attempted:
                 tag_update_attempted = True
                 try:
                     restore_tags(client, video, expected_tags)
@@ -173,9 +164,16 @@ def main(cleanup_media=True):
                 print(f'::warning title=YouTube tag mismatch::{run}: YouTube returned different tags. '
                       'The verified private upload is eligible for run-scoped Drive cleanup.', flush=True)
             break
-        if time.monotonic() >= deadline:
+        if not wait or time.monotonic() >= deadline:
             raise RuntimeError('HD processing pending; preserve all media')
         time.sleep(20)
+    if not wait and state.get('format') == 'english-fluency':
+        captions = client.captions().list(part='snippet', videoId=state['video_id']).execute().get('items', [])
+        if not any(track['id'] == state.get('caption_id')
+                   and track['snippet'].get('language') == 'en'
+                   and track['snippet'].get('status') == 'serving'
+                   and not track['snippet'].get('isDraft') for track in captions):
+            raise RuntimeError('Saved English captions are not serving')
     state.update(phase='verified_private', verification={'video_id': state['video_id'],
         'hd': True, 'processed': True, 'metadata': True, 'private': True,
         'tags_match': tags_match,
@@ -185,8 +183,60 @@ def main(cleanup_media=True):
     if not any(h.get('run') == run for h in history):
         history.append({'run': run, 'video_id': state['video_id'], 'title': state['story']['title'], 'hash': state['hash']})
     store.save('history.json', history)
+    return state
+
+
+def cleanup_previous_runs(store, client, current_run, channel):
+    from googleapiclient.errors import HttpError
+    from workflow import drive_retry
+
+    previous_runs = set()
+    token = None
+    while True:
+        result = drive_retry(lambda: store.client.files().list(
+            q=f"'{store.folder}' in parents and trashed = false and "
+              "appProperties has { key='disposable' and value='v1' }",
+            fields='nextPageToken,files(appProperties)', pageSize=1000, pageToken=token).execute())
+        for entry in result.get('files', []):
+            run = entry.get('appProperties', {}).get('automation_run', '')
+            if re.fullmatch(r'daily-\d+', run) and int(run[6:]) < int(current_run[6:]):
+                previous_runs.add(run)
+        token = result.get('nextPageToken')
+        if not token:
+            break
+
+    cleaned = retained = 0
+    for run in sorted(previous_runs):
+        try:
+            state = verify_run(store, client, run, channel, wait=False)
+        except (RuntimeError, HttpError) as error:
+            print(f'::warning title=Previous Drive media retained::{run}: '
+                  f'Upload could not be verified ({type(error).__name__}).', flush=True)
+            retained += 1
+            continue
+        cleanup(store, run, state)
+        cleaned += 1
+    print(f'::notice title=Previous Drive cleanup complete::{cleaned} previous runs cleaned, '
+          f'{retained} retained because upload verification was incomplete.', flush=True)
+
+
+def main(cleanup_media=True, *, include_previous=False):
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+    from workflow import Store, required
+
+    run = required('SAVED_RUN_ID')
+    if not re.fullmatch(r'daily-\d+', run):
+        raise ValueError('Only daily run IDs are accepted')
+    store = Store()
+    client = build('youtube', 'v3', credentials=Credentials.from_authorized_user_info(
+        json.loads(required('YOUTUBE_TOKEN_JSON'))), cache_discovery=False)
+    channel = required('EXPECTED_CHANNEL_ID')
+    state = verify_run(store, client, run, channel, repair_tags=not cleanup_media)
     if cleanup_media:
         cleanup(store, run, state)
+        if include_previous:
+            cleanup_previous_runs(store, client, run, channel)
     print(json.dumps({'run': run, 'video_id': state['video_id'], 'privacy': 'private', 'verified': True, 'cleanup_complete': cleanup_media}))
     return True
 

@@ -205,3 +205,26 @@ class PrivateVisibilityTests(unittest.TestCase):
 
     def test_tag_mismatch_cannot_modify_a_public_video(self):
         self.run_private_verification('public', repair_tags=True)
+
+
+class PreviousCleanupTests(unittest.TestCase):
+    def test_sweep_cleans_only_older_verified_runs_across_pages(self):
+        from daily_publish import cleanup_previous_runs
+        from unittest.mock import patch
+
+        def tagged(run):
+            return {'appProperties': {'automation_run': run}}
+
+        store, client = MagicMock(), MagicMock()
+        store.client.files().list().execute.side_effect = [
+            {'files': [tagged('daily-100'), tagged('daily-102')], 'nextPageToken': 'next'},
+            {'files': [tagged('daily-100'), tagged('daily-101'), tagged('daily-103'), tagged('foreign')]},
+        ]
+        state = {'video_id': 'verified'}
+        with patch('daily_publish.verify_run', side_effect=[state, RuntimeError('no upload')]) as verify, \
+             patch('daily_publish.cleanup') as clean:
+            cleanup_previous_runs(store, client, 'daily-102', 'channel')
+
+        self.assertEqual([call.args[2] for call in verify.call_args_list], ['daily-100', 'daily-101'])
+        self.assertTrue(all(call.kwargs == {'wait': False} for call in verify.call_args_list))
+        clean.assert_called_once_with(store, 'daily-100', state)
