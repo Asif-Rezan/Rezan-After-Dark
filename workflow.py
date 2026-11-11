@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import random
 import shutil
 import subprocess
 import textwrap
@@ -496,7 +497,7 @@ class Store:
         return str(remote.get('size')) == str(size) and remote.get('md5Checksum') == checksum
 
     def put(self, key, media, size):
-        """Bounded retries on one file ID and upload session; verify before returning."""
+        """Retry resumable uploads with a stable file ID and verify before returning."""
         checksum = hashlib.md5()
         for offset in range(0, size, 8 * 1024 * 1024):
             checksum.update(media.getbytes(offset, min(8 * 1024 * 1024, size - offset)))
@@ -526,12 +527,18 @@ class Store:
                 return self.client.files().create(body=metadata, media_body=media, fields='id')
             return self.client.files().update(fileId=file_id, media_body=media, fields='id')
 
-        request, failures = new_request(), 0
+        request = new_request()
+        resumable = media.resumable()
+        max_failures = 8 if resumable else 5
+        failures = progress = 0
         while True:
             try:
-                if media.resumable():
-                    _, result = request.next_chunk(num_retries=0)
+                if resumable:
+                    chunk, result = request.next_chunk(num_retries=0)
                     if result is None:
+                        if chunk is not None and chunk.resumable_progress > progress:
+                            progress = chunk.resumable_progress
+                            failures = 0
                         continue
                 else:
                     request.execute(num_retries=0)
@@ -549,13 +556,18 @@ class Store:
                 if status == 409:
                     raise RuntimeError('Drive creation conflict; refusing overwrite') from error
                 failures += 1
-                if failures >= 5:
+                if failures >= max_failures:
                     raise
+                # Normally the client probes the existing session before resuming.
+                # Refresh it after repeated gateway errors or when Drive expires it.
+                restart = status in (404, 410) or (
+                    resumable and bool(request.resumable_uri) and failures == 3
+                    and status in (500, 502, 503, 504))
                 print(json.dumps({'check': 'Drive upload', 'retry': failures,
-                    'error_type': type(error).__name__}), flush=True)
-                time.sleep(min(2 ** failures, 16))
-                if status in (404, 410):
-                    # Expired resumable session: reuse the reserved ID, never a new file.
+                    'error_type': type(error).__name__, 'http_status': status,
+                    'restart_session': restart}), flush=True)
+                time.sleep(min(2 ** failures, 30) + random.uniform(0, 1))
+                if restart:
                     request = new_request()
 
     def save(self, key, value):

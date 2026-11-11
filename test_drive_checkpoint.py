@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-from googleapiclient.http import MediaIoBaseUpload
+from googleapiclient.http import MediaIoBaseUpload, MediaUploadProgress
 import workflow
 
 
@@ -66,7 +66,7 @@ class CheckpointTests(unittest.TestCase):
         request.next_chunk.side_effect = TimeoutError()
         with self.assertRaises(TimeoutError):
             self.store.put('key', self.media(), 3)
-        self.assertEqual(request.next_chunk.call_count, 5)
+        self.assertEqual(request.next_chunk.call_count, 8)
         self.store.verified.side_effect = [False, True]
         request.next_chunk.side_effect = [(None, {'id': 'new-id'})]
         self.store.put('key', self.media(), 3)
@@ -80,6 +80,35 @@ class CheckpointTests(unittest.TestCase):
         self.store.put('key', self.media(), 3)
         self.assertEqual(self.store.client.files().update.call_count, 2)
         self.assertTrue(all(c.kwargs['fileId'] == 'existing-id' for c in self.store.client.files().update.call_args_list))
+
+    def test_gateway_failures_refresh_stalled_session_with_same_reserved_id(self):
+        self.store.find.return_value = None
+        self.store.verified.side_effect = [False] * 6 + [True]
+        files = self.store.client.files()
+        files.generateIds.return_value.execute.return_value = {'ids': ['new-id']}
+        stalled, fresh = MagicMock(resumable_uri='session'), MagicMock()
+        stalled.next_chunk.side_effect = [http_error(502)] * 3
+        fresh.next_chunk.side_effect = [http_error(502)] * 3 + [(None, {'id': 'new-id'})]
+        files.create.side_effect = [stalled, fresh]
+
+        self.assertEqual(self.store.put('key', self.media(), 3), {'id': 'new-id'})
+        files.generateIds.assert_called_once()
+        self.assertEqual([call.kwargs['body']['id'] for call in files.create.call_args_list],
+                         ['new-id', 'new-id'])
+        files.update.assert_not_called()
+
+    def test_chunk_progress_resets_failures_without_refreshing_session(self):
+        self.store.verified.side_effect = [False] * 5 + [True]
+        files = self.store.client.files()
+        request = files.update.return_value
+        request.resumable_uri = 'session'
+        request.next_chunk.side_effect = [
+            http_error(502), http_error(502), (MediaUploadProgress(1, 3), None),
+            http_error(502), http_error(502), (None, {'id': 'existing-id'}),
+        ]
+
+        self.assertEqual(self.store.put('key', self.media(), 3), {'id': 'existing-id'})
+        files.update.assert_called_once()
 
     def test_permission_failure_is_not_retried(self):
         self.store.verified.return_value = False

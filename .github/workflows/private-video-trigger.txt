@@ -11,3 +11,5 @@ Keep the existing production run; execute this request under the shared concurre
 Restart full 16-worker generation after fixing YouTube tag-order normalization verification.
 Affected run 42808195140 was cancelled; old upload daily-42805069395 was verified and its Drive cleanup completed successfully.
 Owner requested this restart on 2026-11-10.
+
+Owner requested fresh video generation on 2026-11-11 after hardening Drive resumable upload retries for repeated HTTP 502 responses.
