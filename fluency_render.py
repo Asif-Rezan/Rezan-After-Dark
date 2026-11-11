@@ -96,12 +96,11 @@ def thumbnail(lesson, output, variant_key=None):
         if bounds is None:
             raise ValueError('Empty thumbnail character asset')
         puppet = puppet.crop(bounds)
-        scale = 765 / puppet.height
+        scale = min(420 / puppet.width, 745 / puppet.height)
         puppet = puppet.resize((round(puppet.width * scale), round(puppet.height * scale)),
                                Image.Resampling.LANCZOS)
-        # Let the outer shoulders and lower body run past the frame.
-        x = -50 if side == 0 else im.width + 50 - puppet.width
-        im.paste(puppet, (x, 12))
+        x = 6 if side == 0 else im.width - 6 - puppet.width
+        im.paste(puppet, (x, max(12, im.height - puppet.height)))
 
     draw = ImageDraw.Draw(im)
     for index, line in enumerate(lesson['headline']):
