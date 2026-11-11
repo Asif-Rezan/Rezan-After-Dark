@@ -1,3 +1,1 @@
-Recover the already-uploaded private video for daily-42805069395 after correcting API tag-order verification.
-Do not generate or insert another video during this recovery.
-Verify then clean only this run media; the affected run 42808195140 has been cancelled.
+Compare saved and returned metadata for daily-42919118406.
