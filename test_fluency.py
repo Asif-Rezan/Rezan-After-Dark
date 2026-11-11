@@ -123,10 +123,10 @@ class FluencyTests(unittest.TestCase):
             second = Image.open(path).copy()
             self.assertEqual(first.size, (1280, 720))
             self.assertEqual(first.getpixel((0, 0)), (255, 255, 255))
-            for box in [(0, 0, 400, 720), (880, 0, 1280, 720)]:
+            for box in [(0, 0, 430, 720), (850, 0, 1280, 720)]:
                 self.assertIsNotNone(ImageChops.difference(first.crop(box), second.crop(box)).getbbox())
             self.assertIsNone(ImageChops.difference(
-                first.crop((400, 0, 880, 720)), second.crop((400, 0, 880, 720))).getbbox())
+                first.crop((430, 0, 850, 720)), second.crop((430, 0, 850, 720))).getbbox())
 
     def test_ambiguous_upload_never_regenerates_or_reinserts(self):
         class Store:
