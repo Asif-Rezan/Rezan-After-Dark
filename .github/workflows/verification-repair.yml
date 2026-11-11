@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
-      SAVED_RUN_ID: daily-42919118406
+      SAVED_RUN_ID: daily-42964747148
       RUN_SCOPED_CLEANUP: 'true'
       EXPECTED_CHANNEL_ID: UCwNhdtzL9XZMIAMXm81UCbw
     steps:
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
-      SAVED_RUN_ID: daily-42919118406
+      SAVED_RUN_ID: daily-42964747148
       RUN_SCOPED_CLEANUP: 'true'
       EXPECTED_CHANNEL_ID: UCwNhdtzL9XZMIAMXm81UCbw
     steps:
@@ -55,10 +55,4 @@ jobs:
           DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
           YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
-        run: |
-          python -u fluency_pipeline.py cleanup
-          python - <<'PY'
-          from workflow import Store
-          state=Store().load('runs/daily-42919118406/state.json',{})
-          print('::notice title=Recovered private video::https://www.youtube.com/watch?v='+state['video_id'])
-          PY
+        run: python -u fluency_pipeline.py cleanup

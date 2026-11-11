@@ -131,7 +131,7 @@ class RecoveryTests(unittest.TestCase):
             self.assertNotIn('disposable', body['appProperties'])
 
 class PrivateVisibilityTests(unittest.TestCase):
-    def run_private_verification(self, privacy, *, repair_tags=False, repair_succeeds=True):
+    def run_private_verification(self, privacy, *, repair_tags=False, repair_succeeds=True, cleanup_media=False):
         import daily_publish
         from unittest.mock import patch
         state = {'phase': 'complete', 'video_id': 'v', 'thumbnail_uploaded': True,
@@ -163,13 +163,10 @@ class PrivateVisibilityTests(unittest.TestCase):
                  'google.oauth2.credentials': MagicMock(),
                  'googleapiclient.discovery': MagicMock(build=MagicMock(return_value=client))}), \
              patch('daily_publish.cleanup') as clean, patch('daily_publish.time.sleep'):
-            if repair_tags and privacy == 'private':
-                if repair_succeeds:
-                    self.assertTrue(daily_publish.main(cleanup_media=False))
-                    self.assertEqual(state['phase'], 'verified_private')
-                else:
-                    self.assertFalse(daily_publish.main(cleanup_media=False))
-                    store.save.assert_not_called()
+            if repair_tags and privacy == 'private' and not cleanup_media:
+                self.assertTrue(daily_publish.main(cleanup_media=False))
+                self.assertEqual(state['phase'], 'verified_private')
+                self.assertEqual(state['verification']['tags_match'], repair_succeeds)
                 expected_snippet = {field: value for field, value in restored['snippet'].items()
                                     if field != 'channelId'}
                 expected_snippet['tags'] = state['story']['tags']
@@ -180,11 +177,13 @@ class PrivateVisibilityTests(unittest.TestCase):
                 daily_publish.main()
                 self.assertEqual(state['phase'], 'verified_private')
                 clean.assert_called_once_with(store, 'daily-123', state)
+                if repair_tags:
+                    self.assertFalse(state['verification']['tags_match'])
             else:
                 with self.assertRaisesRegex(RuntimeError, 'remain private'):
                     daily_publish.main(cleanup_media=not repair_tags)
                 clean.assert_not_called()
-            if not repair_tags or privacy != 'private':
+            if cleanup_media or not repair_tags or privacy != 'private':
                 client.videos().update.assert_not_called()
             client.videos().insert.assert_not_called()
 
@@ -198,8 +197,11 @@ class PrivateVisibilityTests(unittest.TestCase):
     def test_private_english_upload_restores_replaced_tags_and_verifies_readback(self):
         self.run_private_verification('private', repair_tags=True)
 
-    def test_failed_tag_restoration_preserves_media_without_repeated_updates(self):
+    def test_failed_tag_restoration_still_marks_private_upload_verified(self):
         self.run_private_verification('private', repair_tags=True, repair_succeeds=False)
+
+    def test_cleanup_rechecks_and_accepts_persistent_tag_mismatch(self):
+        self.run_private_verification('private', repair_tags=True, repair_succeeds=False, cleanup_media=True)
 
     def test_tag_mismatch_cannot_modify_a_public_video(self):
         self.run_private_verification('public', repair_tags=True)

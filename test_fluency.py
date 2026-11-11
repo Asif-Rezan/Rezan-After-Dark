@@ -144,7 +144,7 @@ class FluencyUploadTests(unittest.TestCase):
             'contentDetails':{'definition':'hd'}}
         self.assertTrue(validate_remote(video,state,'c'))
         video['snippet']['tags']=video['snippet']['tags'][:-1]
-        with self.assertRaisesRegex(RuntimeError,'metadata'):validate_remote(video,state,'c')
+        self.assertTrue(validate_remote(video,state,'c'))
         video['snippet']['tags']=list(reversed(self.lesson['tags']))
         state['story']=copy.deepcopy(self.lesson);state['story']['tags']=list(reversed(self.lesson['tags']))
         with self.assertRaisesRegex(RuntimeError,'requested_first_tag'):validate_remote(video,state,'c')

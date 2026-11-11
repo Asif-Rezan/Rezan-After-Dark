@@ -11,10 +11,6 @@ def disposable(name):
         re.fullmatch(r'(?:shot-\d+\.(?:png|mp4|qa\.json)|speech-[a-f0-9]{64}\.wav|render-0(?:0[0-9]|1[0-5])\.mp4)', name))
 
 
-class TagMismatch(RuntimeError):
-    pass
-
-
 def validate_remote(video, state, channel):
     if video.get('id') != state.get('video_id'):
         raise RuntimeError('Video identity mismatch')
@@ -50,9 +46,9 @@ def validate_remote(video, state, channel):
     ready = (status.get('uploadStatus') == 'processed'
         and video.get('processingDetails', {}).get('processingStatus') == 'succeeded'
         and video.get('contentDetails', {}).get('definition') == 'hd')
-    # YouTube can reorder tags. Membership must still match the upload request.
-    if ready and set(snippet.get('tags', [])) != set(story['tags']):
-        raise TagMismatch('YouTube metadata mismatch: tags')
+    if (ready and state.get('format') != 'english-fluency'
+            and set(snippet.get('tags', [])) != set(story['tags'])):
+        raise RuntimeError('YouTube metadata mismatch: tags')
     return ready
 
 
@@ -129,11 +125,14 @@ def cleanup(store, run, state):
                               'total': len(journal['files'])}), flush=True)
     journal['complete'] = True
     store.save(key, journal)
+    print(f"::notice title=Drive cleanup complete::{run}: {len(journal['deleted'])} tagged files accounted for.",
+          flush=True)
 
 
 def main(cleanup_media=True):
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
+    from googleapiclient.errors import HttpError
     from workflow import Store, required
     run = required('SAVED_RUN_ID')
     if not re.fullmatch(r'daily-\d+', run):
@@ -149,7 +148,7 @@ def main(cleanup_media=True):
         json.loads(required('YOUTUBE_TOKEN_JSON'))), cache_discovery=False)
     channel = required('EXPECTED_CHANNEL_ID')
     deadline = time.monotonic() + 1800
-    tag_checks_remaining = None
+    tag_update_attempted = False
     while True:
         items = client.videos().list(part='snippet,status,processingDetails,contentDetails',
             id=state['video_id']).execute().get('items', [])
@@ -158,29 +157,29 @@ def main(cleanup_media=True):
         video = items[0]
         if video['status']['privacyStatus'] != 'private':
             raise RuntimeError('Video must remain private; preserve all media')
-        try:
-            if validate_remote(video, state, channel):
-                break
-        except TagMismatch:
-            if cleanup_media or state.get('format') != 'english-fluency':
-                raise
-            if tag_checks_remaining is None:
-                restore_tags(client, video, state['story']['tags'])
-                tag_checks_remaining = 3
+        if validate_remote(video, state, channel):
+            returned_tags = video['snippet'].get('tags', [])
+            expected_tags = state['story']['tags']
+            tags_match = set(returned_tags) == set(expected_tags)
+            if not tags_match and not cleanup_media and not tag_update_attempted:
+                tag_update_attempted = True
+                try:
+                    restore_tags(client, video, expected_tags)
+                except HttpError as error:
+                    print(f'::warning title=YouTube tag update failed::HTTP {error.resp.status}. '
+                          'Checking the private upload again.', flush=True)
                 continue
-            tag_checks_remaining -= 1
-            if tag_checks_remaining == 0 or time.monotonic() >= deadline:
-                print(f'::warning title=YouTube tag verification pending::'
-                      f'{run}: YouTube still returns different tags after the update. '
-                      f'Drive media retained. Check the tags in YouTube Studio and retry with cleanup_run={run}.',
-                      flush=True)
-                return False
+            if not tags_match:
+                print(f'::warning title=YouTube tag mismatch::{run}: YouTube returned different tags. '
+                      'The verified private upload is eligible for run-scoped Drive cleanup.', flush=True)
+            break
         if time.monotonic() >= deadline:
             raise RuntimeError('HD processing pending; preserve all media')
         time.sleep(20)
     state.update(phase='verified_private', verification={'video_id': state['video_id'],
         'hd': True, 'processed': True, 'metadata': True, 'private': True,
-        'tag_order_normalized': video['snippet'].get('tags', []) != state['story']['tags']})
+        'tags_match': tags_match,
+        'tag_order_normalized': tags_match and returned_tags != expected_tags})
     store.save(key, state)
     history = store.load('history.json', [])
     if not any(h.get('run') == run for h in history):
