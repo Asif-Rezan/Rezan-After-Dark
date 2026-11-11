@@ -80,22 +80,60 @@ def lesson_frame(bg, lesson, turn, fraction, practice=False):
     return im
 
 
+def thumbnail_gesture(puppet, side, lift, lean):
+    """Bend the open-hand gesture around the elbow, then tilt the stance."""
+    left, right = (275, 455) if side == 0 else (100, 265)
+    top, bottom = 195, 415
+    columns = [left, (left + right) // 2, right]
+    rows = [top, 245, 300, 350, bottom]
+    center_x = 383 if side == 0 else 163
+
+    def source_point(x, y):
+        if x in (left, right) or y in (top, bottom):
+            return x, y
+        # Keep the shoulder and elbow anchored, with the largest shift at the palm.
+        reach = max(0.0, 1 - abs(x - center_x) / 85)
+        height = max(0.0, 1 - abs(y - 295) / 115)
+        return x, y + lift * reach * height
+
+    # Include an anchor at the center of the palm so the hand moves as a unit.
+    columns = sorted(set(columns + [center_x]))
+    mesh = []
+    for y0, y1 in zip(rows, rows[1:]):
+        for x0, x1 in zip(columns, columns[1:]):
+            quad = [source_point(x, y) for x, y in ((x0, y0), (x0, y1), (x1, y1), (x1, y0))]
+            mesh.append(((x0-left, y0-top, x1-left, y1-top),
+                         tuple(coordinate for point in quad for coordinate in point)))
+    arm = puppet.transform((right-left, bottom-top), Image.Transform.MESH, mesh, Image.Resampling.BICUBIC)
+    puppet.paste(arm, (left, top))
+    return puppet.rotate(lean, Image.Resampling.BICUBIC, expand=True, fillcolor='white')
+
+
 def thumbnail(lesson, output, variant_key=None):
     """Place the two illustrated speakers around a centered, topic-specific hook."""
     im = Image.new('RGB', (1280, 720), 'white')
     variant = lesson.get('thumbnail_variant')
     if variant is None:
         variant = int(hashlib.sha256(str(variant_key or lesson).encode()).hexdigest()[:8], 16)
-    variant %= 9
-    pose_indices = (variant % 3, (variant + variant // 3) % 3)
+    gesture_cycle, face = divmod(variant, 9)
+    pose_indices = (face % 3, (face + face // 3) % 3)
+    gesture_indices = ((face + gesture_cycle) % 5, (3 * face + gesture_cycle // 5) % 5)
+    lean_indices = ((face + gesture_cycle // 25) % 3, (2 * face + gesture_cycle // 75) % 3)
+    lifts = (-38, -18, 0, 18, 38)
+    leans = (-3, 0, 3)
     for side, (poses, pose_index) in enumerate(zip(CharacterAnimator().poses, pose_indices)):
-        puppet = poses[pose_index].convert('RGB')
+        lean = leans[lean_indices[side]]
+        puppet = thumbnail_gesture(poses[pose_index].convert('RGB'), side,
+                                  lifts[gesture_indices[side]], lean)
         white = Image.new('RGB', puppet.size, 'white')
         bounds = ImageChops.difference(puppet, white).convert('L').point(
             lambda value: 255 if value > 22 else 0).getbbox()
         if bounds is None:
             raise ValueError('Empty thumbnail character asset')
-        puppet = puppet.crop(bounds)
+        left, top, right, bottom = bounds
+        # Trim the angled lower edge so the illustration meets the frame cleanly.
+        bottom -= math.ceil((right - left) * abs(math.sin(math.radians(lean))))
+        puppet = puppet.crop((left, top, right, bottom))
         scale = min(420 / puppet.width, 745 / puppet.height)
         puppet = puppet.resize((round(puppet.width * scale), round(puppet.height * scale)),
                                Image.Resampling.LANCZOS)
